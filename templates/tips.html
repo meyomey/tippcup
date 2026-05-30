@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Alle Tipps{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-end mb-2 no-print"><button class="btn btn-sm btn-print" onclick="window.print()"><i class="bi bi-printer me-1"></i>PDF / Drucken</button></div><div class="print-header d-none"><h3>⚽ Tippcup Bundesliga – Alle Tipps</h3></div><div class="mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <h5 class="mb-0"><i class="bi bi-eye-fill me-2"></i>Alle abgegebenen Tipps</h5>
+  {% if season %}<span class="badge bg-bundesliga fs-6">{{ season.name }}</span>{% endif %}
+</div>
+<div class="alert alert-info py-2 small no-print">
+  <i class="bi bi-hand-index me-1"></i>
+  Auf das <i class="bi bi-box-arrow-up-right"></i>-Symbol neben einem Namen klicken um den Einzeltipp dieses Spielers zu öffnen.
+  {% if wildcard_id %}
+  &nbsp;·&nbsp; 🎲 <strong>Wildcard</strong> = Spieler mit der höchsten Einzelabweichung.
+  {% endif %}
+</div>
+
+{% for lg_key, lg_name in leagues.items() %}
+<div class="card shadow-sm {% if not loop.last %}mb-4{% endif %}">
+  <div class="card-header fw-bold {% if lg_key=='bl1' %}bg-dark text-white{% else %}bg-secondary text-white{% endif %}">
+    <i class="bi bi-shield-fill me-2"></i>{{ lg_name }}
+  </div>
+  <div class="card-body p-0">
+    {% if users_preds and teams[lg_key] %}
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0" id="tips-matrix-{{ lg_key }}">
+        <thead class="table-dark">
+          <tr>
+            <th style="min-width:130px; position:sticky; left:0; z-index:2; background:#212529;">Team</th>
+            <th class="text-center text-warning sort-matrix" data-table="tips-matrix-{{ lg_key }}"
+                style="min-width:55px; position:sticky; left:130px; z-index:2; background:#212529; cursor:pointer"
+                title="Nach aktuellem Platz sortieren">
+              Ist <i class="bi bi-arrow-down-up ms-1 opacity-50" style="font-size:.65rem"></i>
+            </th>
+            {% for up in users_preds %}
+            <th class="text-center" style="min-width:75px">
+              <div class="small">
+                <a href="{{ url_for('tips_user', uid=up.user.id) }}"
+                   class="text-white text-decoration-none"
+                   title="Einzelansicht {{ up.user.display_name or up.user.username }}">
+                  {{ (up.user.display_name or up.user.username)[:10] }}
+                  <i class="bi bi-box-arrow-up-right ms-1" style="font-size:.6rem"></i>
+                </a>
+              </div>
+              {% if up.user.score is not none %}<div class="badge bg-success" style="font-size:.65rem">{{ up.user.score }}</div>{% endif %}
+              {% if up.user.id == wildcard_id %}<div class="badge bg-danger" style="font-size:.6rem" title="Höchste Einzelabweichung">🎲</div>{% endif %}
+            </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for team in teams[lg_key] %}
+          {% set actual = standings_dict.get(team.id) %}
+          <tr data-ist="{{ actual or 99 }}">
+            <td style="position:sticky;left:0;z-index:1;font-weight:500"
+                class="tips-sticky-col">
+              {% if team.logo_url %}<img src="{{ team.logo_url }}" style="width:16px;height:16px;object-fit:contain" class="me-1">{% endif %}
+              {{ team.short_name or team.name[:14] }}
+            </td>
+            <td class="text-center fw-bold tips-sticky-col2"
+                style="position:sticky;left:130px;z-index:1;">
+              {% if actual %}<span class="rank-pill current-rank">{{ actual }}</span>{% else %}<span class="text-muted">–</span>{% endif %}
+            </td>
+            {% for up in users_preds %}
+            {% set pred = up.preds.get(team.id) %}
+            {% if pred and actual %}
+              {% set diff = (pred - actual)|abs %}
+              <td class="text-center {% if diff==0 %}cell-exact{% elif diff<=2 %}cell-close{% elif diff<=5 %}cell-medium{% else %}cell-far{% endif %}">
+                <span class="rank-pill">{{ pred }}</span>
+                {% if diff > 0 %}<sup class="diff-sup">±{{ diff }}</sup>{% endif %}
+              </td>
+            {% elif pred %}
+              <td class="text-center"><span class="rank-pill">{{ pred }}</span></td>
+            {% else %}
+              <td class="text-center text-muted">–</td>
+            {% endif %}
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="p-2 border-top d-flex flex-wrap gap-2 align-items-center">
+      <span class="small text-muted">Farbcode:</span>
+      <span class="badge cell-exact p-2">Exakt</span>
+      <span class="badge cell-close p-2">±1-2</span>
+      <span class="badge cell-medium p-2">±3-5</span>
+      <span class="badge cell-far p-2">±6+</span>
+    </div>
+    {% else %}
+    <div class="text-center p-4 text-muted"><i class="bi bi-eye-slash fs-2"></i><p class="mt-2">Noch keine Tipps sichtbar.</p></div>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+
+<script>
+(function() {
+  document.querySelectorAll('.sort-matrix').forEach(function(th) {
+    th.addEventListener('click', function() {
+      var tableId = this.dataset.table;
+      var tbody   = document.getElementById(tableId).querySelector('tbody');
+      var wasAsc  = this.dataset.sortDir === 'asc';
+      var asc     = !wasAsc;
+      this.dataset.sortDir = asc ? 'asc' : 'desc';
+      this.querySelector('i').className = 'bi bi-arrow-' + (asc ? 'up' : 'down') + ' ms-1 text-warning';
+      this.style.fontWeight = '700';
+      var rows = Array.from(tbody.querySelectorAll('tr'));
+      rows.sort(function(a, b) {
+        var va = parseFloat(a.dataset.ist) || 99;
+        var vb = parseFloat(b.dataset.ist) || 99;
+        return asc ? va - vb : vb - va;
+      });
+      rows.forEach(function(r) { tbody.appendChild(r); });
+    });
+  });
+})();
+</script>
+{% endblock %}
+

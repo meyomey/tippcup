@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}Tipp von {{ tipuser.display_name or tipuser.username }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 no-print">
+  <a href="{{ url_for('tips') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left me-1"></i>Zurück zur Übersicht
+  </a>
+  <button class="btn btn-sm btn-print" onclick="window.print()">
+    <i class="bi bi-printer me-1"></i>PDF / Drucken
+  </button>
+</div>
+
+<div class="print-header d-none">
+  <h3>⚽ Tippcup Bundesliga – Tipp von {{ tipuser.display_name or tipuser.username }}</h3>
+  <p>{{ season.name if season }}</p>
+</div>
+
+<!-- Spieler-Header -->
+<div class="card shadow-sm mb-4">
+  <div class="card-body py-3">
+    <div class="d-flex align-items-center gap-3 flex-wrap">
+      <div class="profile-avatar" style="width:52px;height:52px;font-size:1.4rem">
+        {{ (tipuser.display_name or tipuser.username)[0].upper() }}
+      </div>
+      <div>
+        <h4 class="mb-0 fw-bold">{{ tipuser.display_name or tipuser.username }}</h4>
+        <div class="text-muted small">@{{ tipuser.username }}</div>
+      </div>
+      {% if score %}
+      <div class="ms-auto text-center">
+        <div class="score-display p-3 rounded">
+          <div class="score-label">Gesamtscore</div>
+          <div class="score-number">{{ score.score }}</div>
+          {% if user_rank %}
+          <div class="mt-1">
+            <span class="badge bg-light text-dark">
+              {% if user_rank == 1 %}🥇{% elif user_rank == 2 %}🥈{% elif user_rank == 3 %}🥉
+              {% else %}{{ user_rank }}.{% endif %} Platz
+            </span>
+          </div>
+          {% endif %}
+          <div class="score-sub d-flex gap-3 mt-1 justify-content-center">
+            <span><strong>BL1:</strong> {{ score.score_bl1 }}</span>
+            <span><strong>BL2:</strong> {{ score.score_bl2 }}</span>
+          </div>
+        </div>
+      </div>
+      {% if score.volltreffer is defined %}
+      <div class="text-center d-none d-md-block">
+        <div class="fs-2">🎯</div>
+        <div class="fw-bold">{{ score.volltreffer or 0 }}</div>
+        <div class="text-muted small">Volltreffer</div>
+      </div>
+      <div class="text-center d-none d-md-block">
+        <div class="fs-5 fw-bold
+          {% if (score.max_deviation or 0) <= 3 %}text-success
+          {% elif (score.max_deviation or 0) <= 8 %}text-warning
+          {% else %}text-danger{% endif %}">
+          {{ score.max_deviation or 0 }}
+        </div>
+        <div class="text-muted small">Max. Abw.</div>
+      </div>
+      <div class="text-center d-none d-md-block">
+        <div class="fs-5 fw-bold text-secondary">{{ '%.3f'|format(score.std_deviation or 0) }}</div>
+        <div class="text-muted small">σ Std.abw.</div>
+      </div>
+      {% endif %}
+      {% else %}
+      <div class="ms-auto text-muted"><i class="bi bi-hourglass me-1"></i>Noch kein Score berechnet</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Tipp-Tabellen pro Liga -->
+<div class="row g-4">
+  {% for lg_key, lg_name in leagues.items() %}
+  <div class="col-12 col-xl-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header {% if lg_key=='bl1' %}bg-dark{% else %}bg-secondary{% endif %} text-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-shield-fill me-2"></i>{{ lg_name }}</span>
+        {% if score %}
+        <div class="d-flex gap-2">
+          <span class="badge bg-light text-dark">Score: {{ score['score_' ~ lg_key] }}</span>
+          <span class="badge bg-light text-dark">Abw.: {{ score['deviation_' ~ lg_key] }}</span>
+        </div>
+        {% endif %}
+      </div>
+      <div class="card-body p-0">
+        {% if preds[lg_key] %}
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0 align-middle tips-user-table-{{ lg_key }}">
+            <thead class="table-dark">
+              <tr>
+                <th class="text-center sort-col-user" data-key="ist" style="width:40px;cursor:pointer" title="Nach aktuellem Platz sortieren">
+                  Ist <i class="bi bi-arrow-down-up ms-1 opacity-50" style="font-size:.65rem"></i>
+                </th>
+                <th>Team</th>
+                <th class="text-center sort-col-user" data-key="tipp" style="width:50px;cursor:pointer" title="Nach Tipp sortieren">
+                  Tipp <i class="bi bi-arrow-down-up ms-1 opacity-50" style="font-size:.65rem"></i>
+                </th>
+                {% if season and season.season_started %}
+                <th class="text-center sort-col-user" data-key="abw" style="width:55px;cursor:pointer" title="Nach Abweichung sortieren">
+                  Abw. <i class="bi bi-arrow-down-up ms-1 opacity-50" style="font-size:.65rem"></i>
+                </th>
+                {% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in preds[lg_key] %}
+              {% set diff = (p.predicted_rank - p.current_rank)|abs if p.current_rank else none %}
+              <tr class="{% if diff is not none and diff == 0 %}table-success{% elif diff is not none and diff <= 2 %}table-warning{% endif %}"
+                  data-ist="{{ p.current_rank or 99 }}"
+                  data-tipp="{{ p.predicted_rank }}"
+                  data-abw="{{ diff if diff is not none else 99 }}">
+                <td class="text-center fw-bold text-muted">{{ p.current_rank or '–' }}</td>
+                <td>
+                  {% if p.logo_url %}
+                  <img src="{{ p.logo_url }}" style="width:18px;height:18px;object-fit:contain" class="me-1">
+                  {% endif %}
+                  {{ p.name }}
+                </td>
+                <td class="text-center fw-bold">
+                  {{ p.predicted_rank }}
+                </td>
+                {% if season and season.season_started %}
+                <td class="text-center">
+                  {% if diff is not none %}
+                  <span class="badge {% if diff==0 %}bg-success{% elif diff<=3 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                    {% if diff==0 %}🎯{% else %}±{{ diff }}{% endif %}
+                  </span>
+                  {% else %}–{% endif %}
+                </td>
+                {% endif %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center p-4 text-muted">
+          <i class="bi bi-dash-circle fs-2"></i>
+          <p class="mt-2 small">Kein Tipp für diese Liga abgegeben.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Navigation zu anderen Spielern -->
+
+
+<script>
+(function() {
+  document.querySelectorAll('.sort-col-user').forEach(function(th) {
+    th.addEventListener('click', function() {
+      var table  = this.closest('table');
+      var tbody  = table.querySelector('tbody');
+      var key    = this.dataset.key;
+      var wasAsc = this.dataset.sortDir === 'asc';
+      var asc    = !wasAsc;
+      table.querySelectorAll('.sort-col-user').forEach(function(h) {
+        delete h.dataset.sortDir;
+        h.querySelector('i').className = 'bi bi-arrow-down-up ms-1 opacity-50';
+        h.style.fontWeight = '';
+      });
+      this.dataset.sortDir = asc ? 'asc' : 'desc';
+      this.querySelector('i').className = 'bi bi-arrow-' + (asc ? 'up' : 'down') + ' ms-1 text-warning';
+      this.style.fontWeight = '700';
+      var rows = Array.from(tbody.querySelectorAll('tr'));
+      rows.sort(function(a, b) {
+        var va = parseFloat(a.dataset[key]) || 99;
+        var vb = parseFloat(b.dataset[key]) || 99;
+        return asc ? va - vb : vb - va;
+      });
+      rows.forEach(function(r) { tbody.appendChild(r); });
+    });
+  });
+})();
+</script>
+{% endblock %}

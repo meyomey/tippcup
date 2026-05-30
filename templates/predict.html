@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}Tipp abgeben{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm mb-3">
+  <div class="card-header bg-bundesliga text-white">
+    <i class="bi bi-pencil-square me-2"></i>Abschlusstabelle tippen – 1. & 2. Bundesliga
+  </div>
+  <div class="card-body py-2">
+    <div class="alert alert-info py-2 mb-2">
+      <i class="bi bi-info-circle me-2"></i>
+      <strong>Anleitung:</strong> Ordne alle Teams per Drag &amp; Drop. Jede Liga separat Platz 1–18.
+      Maximale Punktzahl: <strong>324</strong> (je 162 pro Liga).
+    </div>
+
+    {# ── Deadline-Anzeige ── #}
+    {% if deadlines %}
+    <div class="row g-2 mt-1">
+      {% for lg_key, lg_name in leagues.items() %}
+      {% if deadlines.get(lg_key) %}
+      {% set dl = deadlines[lg_key] %}
+      {% set remaining = (dl - now_utc).total_seconds() %}
+      <div class="col-12 col-sm-6">
+        <div class="d-flex align-items-center gap-2 p-2 rounded border
+          {% if remaining < 3600 %}border-danger bg-danger bg-opacity-10
+          {% elif remaining < 86400 %}border-warning bg-warning bg-opacity-10
+          {% else %}border-success bg-success bg-opacity-10{% endif %}">
+          <i class="bi bi-clock-fill
+            {% if remaining < 3600 %}text-danger
+            {% elif remaining < 86400 %}text-warning
+            {% else %}text-success{% endif %} fs-5"></i>
+          <div>
+            <div class="small fw-semibold text-muted">{{ lg_name }} – Tippschluss:</div>
+            <div class="fw-bold">
+              {{ dl.strftime('%d.%m.%Y') }} um
+              <span class="{% if remaining < 86400 %}text-danger{% endif %}">
+                {{ dl.strftime('%H:%M') }} Uhr
+              </span>
+            </div>
+            <div class="small
+              {% if remaining < 3600 %}text-danger fw-bold
+              {% elif remaining < 86400 %}text-warning
+              {% else %}text-muted{% endif %}">
+              {% if remaining <= 0 %}
+                <span id="countdown_{{ lg_key }}" class="deadline-countdown countdown-urgent">⛔ Abgelaufen</span>
+              {% elif remaining < 3600 %}
+                <span id="countdown_{{ lg_key }}" class="deadline-countdown countdown-urgent">⚠️ Noch {{ (remaining / 60)|int }} Minuten!</span>
+              {% elif remaining < 86400 %}
+                <span id="countdown_{{ lg_key }}" class="deadline-countdown countdown-warn">⏰ Noch {{ (remaining / 3600)|int }} Stunden</span>
+              {% else %}
+                <span id="countdown_{{ lg_key }}" class="deadline-countdown countdown-ok">📅 Noch {{ (remaining / 86400)|int }} Tag{{ 'e' if (remaining / 86400)|int != 1 }}</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-secondary py-1 mb-0 mt-2 small">
+      <i class="bi bi-clock me-1"></i>
+      Tippschluss: bis zum Anpfiff des ersten Spiels (wird beim ersten Aufruf automatisch ermittelt).
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<form method="POST" id="predictForm">
+<div class="row g-3">
+  {% for lg_key, lg_name in leagues.items() %}
+  <div class="col-12 col-xl-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-bold
+        {% if lg_key == 'bl1' %}bg-dark text-white{% else %}bg-secondary text-white{% endif %}">
+        <i class="bi bi-shield-fill me-2"></i>{{ lg_name }}
+        <span class="badge bg-light text-dark ms-2">{{ teams[lg_key]|length }} Teams</span>
+      </div>
+      <div class="card-body p-2">
+        <div id="list_{{ lg_key }}" class="sortable-list">
+          {% for team in teams[lg_key] %}
+          <div class="sortable-item" data-id="{{ team.id }}" data-league="{{ lg_key }}">
+            <div class="rank-badge" id="badge_{{ team.id }}">{{ existing.get(team.id, loop.index) }}</div>
+            <div class="team-logo">
+              {% if team.logo_url %}<img src="{{ team.logo_url }}" alt="" onerror="this.style.display='none'">
+              {% else %}<i class="bi bi-shield-fill text-muted"></i>{% endif %}
+            </div>
+            <div class="team-name">{{ team.name }}
+              {% if group_avg and team.id in group_avg and existing and team.id in existing %}
+              {% set my = existing[team.id] %}
+              {% set avg = group_avg[team.id] %}
+              {% set diff = (my - avg)|abs %}
+              <span class="confidence-badge {% if diff <= 1 %}conf-agree{% elif diff <= 3 %}conf-neutral{% else %}conf-differ{% endif %}"
+                    title="Gruppen-Schnitt: Platz {{ avg }}">
+                Ø {{ avg }}
+              </span>
+              {% endif %}
+            </div>
+            <div class="drag-handle"><i class="bi bi-grip-vertical text-muted"></i></div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="card-footer d-flex justify-content-between align-items-center py-1">
+        <small class="text-muted" id="status_{{ lg_key }}">Bereit</small>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="shuffle('{{ lg_key }}')">
+          <i class="bi bi-shuffle"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Hidden inputs -->
+{% for lg_key, lg_name in leagues.items() %}
+{% for team in teams[lg_key] %}
+<input type="hidden" name="rank_{{ team.id }}" id="input_{{ team.id }}" value="{{ existing.get(team.id, loop.index) }}">
+{% endfor %}
+{% endfor %}
+
+<div class="d-flex gap-2 flex-wrap mt-4">
+  <button type="submit" class="btn btn-bundesliga btn-lg">
+    <i class="bi bi-check-circle-fill me-2"></i>Tipp speichern
+  </button>
+  <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-lg">
+    <i class="bi bi-x-circle me-2"></i>Abbrechen
+  </a>
+</div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  function updateRanks(league) {
+    const list  = document.getElementById('list_' + league);
+    const items = list.querySelectorAll('.sortable-item');
+    let valid = true;
+    items.forEach((item, idx) => {
+      const rank = idx + 1;
+      document.getElementById('badge_' + item.dataset.id).textContent = rank;
+      document.getElementById('input_' + item.dataset.id).value = rank;
+    });
+    const status = document.getElementById('status_' + league);
+    status.textContent = items.length + ' Teams sortiert ✓';
+    status.className   = 'text-success small';
+  }
+
+  ['bl1','bl2'].forEach(lg => {
+    const list = document.getElementById('list_' + lg);
+    if (!list) return;
+    Sortable.create(list, {
+      animation: 150, handle: '.drag-handle',
+      ghostClass: 'sortable-ghost', chosenClass: 'sortable-chosen',
+      onEnd: () => updateRanks(lg)
+    });
+    updateRanks(lg);
+  });
+
+  window.shuffle = function(league) {
+    const list  = document.getElementById('list_' + league);
+    const items = Array.from(list.querySelectorAll('.sortable-item'));
+    for (let i = items.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      list.insertBefore(items[j], items[i]);
+      [items[i], items[j]] = [items[j], items[i]];
+    }
+    updateRanks(league);
+  };
+
+  document.getElementById('predictForm').addEventListener('submit', function(e) {
+    let ok = true;
+    ['bl1','bl2'].forEach(lg => {
+      const list  = document.getElementById('list_' + lg);
+      if (!list) return;
+      const ranks = new Set();
+      list.querySelectorAll('.sortable-item').forEach((item, idx) => ranks.add(idx+1));
+      if (ranks.size !== list.querySelectorAll('.sortable-item').length) ok = false;
+    });
+    if (!ok) { e.preventDefault(); alert('Fehler in der Reihenfolge. Bitte Seite neu laden.'); }
+  });
+
+  // ── Live-Countdown ────────────────────────────────────────
+  {% for lg_key, lg_name in leagues.items() %}
+  {% if deadlines.get(lg_key) %}
+  (function() {
+    const deadline = new Date('{{ deadlines[lg_key].isoformat() }}');
+    const el = document.getElementById('countdown_{{ lg_key }}');
+    if (!el) return;
+    function tick() {
+      const diff = Math.floor((deadline - Date.now()) / 1000);
+      if (diff <= 0) { el.textContent = '⛔ Abgelaufen'; el.className = 'deadline-countdown countdown-urgent'; return; }
+      const h = Math.floor(diff/3600), m = Math.floor((diff%3600)/60), s = diff%60;
+      if (diff < 3600) {
+        el.textContent = `⚠️ Noch ${m}:${String(s).padStart(2,'0')} Minuten!`;
+        el.className = 'deadline-countdown countdown-urgent';
+      } else if (diff < 86400) {
+        el.textContent = `⏰ Noch ${h}h ${m}min`;
+        el.className = 'deadline-countdown countdown-warn';
+      } else {
+        el.textContent = `📅 Noch ${Math.floor(diff/86400)} Tag(e)`;
+        el.className = 'deadline-countdown countdown-ok';
+      }
+    }
+    tick(); setInterval(tick, 1000);
+  })();
+  {% endif %}
+  {% endfor %}
+})();
+</script>
+{% endblock %}

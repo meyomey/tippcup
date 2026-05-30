@@ -1,0 +1,182 @@
+{% extends "admin/base.html" %}
+{% block title %}Admin – Backup & Wiederherstellung{% endblock %}
+
+{% block admin_content %}
+<h4 class="mb-4"><i class="bi bi-archive-fill me-2"></i>Backup & Wiederherstellung</h4>
+
+{# Statistiken #}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card text-center p-3 shadow-sm">
+      <div class="fs-4 fw-bold text-primary">{{ stats.users }}</div>
+      <div class="small text-muted">Benutzer</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center p-3 shadow-sm">
+      <div class="fs-4 fw-bold text-success">{{ stats.predictions }}</div>
+      <div class="small text-muted">Tipps</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center p-3 shadow-sm">
+      <div class="fs-4 fw-bold text-warning">{{ stats.seasons }}</div>
+      <div class="small text-muted">Saisons</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center p-3 shadow-sm">
+      <div class="fs-4 fw-bold text-info">{{ stats.chat }}</div>
+      <div class="small text-muted">Chat-Nachrichten</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+
+  {# Backup erstellen #}
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-success text-white">
+        <i class="bi bi-download me-2"></i>Backup erstellen
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          Wähle aus, was ins ZIP-Archiv aufgenommen werden soll.
+          Der Dateiname enthält Datum, Uhrzeit und gewählten Inhalt.
+        </p>
+
+        <form method="POST" action="{{ url_for('admin_backup') }}">
+
+          <div class="card mb-2 border-0 bg-light">
+            <div class="card-body py-2 px-3 d-flex justify-content-between align-items-center">
+              <div>
+                <div class="form-check mb-0">
+                  <input class="form-check-input" type="checkbox" name="include_db" id="cb_db" checked>
+                  <label class="form-check-label fw-semibold" for="cb_db">
+                    <i class="bi bi-database me-1 text-primary"></i>Datenbank
+                  </label>
+                </div>
+                <div class="text-muted small ms-4">Alle Tipps, User, Scores, Archiv, Chat</div>
+              </div>
+              <div class="text-end text-muted small">
+                {% if db_size >= 1048576 %}{{ "%.1f"|format(db_size/1048576) }} MB
+                {% else %}{{ "%.0f"|format(db_size/1024) }} KB{% endif %}
+                {% if db_mtime %}<br><span style="font-size:.7rem">{{ db_mtime }}</span>{% endif %}
+              </div>
+            </div>
+          </div>
+
+          <div class="card mb-2 border-0 bg-light">
+            <div class="card-body py-2 px-3 d-flex justify-content-between align-items-center">
+              <div>
+                <div class="form-check mb-0">
+                  <input class="form-check-input" type="checkbox" name="include_uploads" id="cb_uploads">
+                  <label class="form-check-label fw-semibold" for="cb_uploads">
+                    <i class="bi bi-images me-1 text-warning"></i>Medien & Uploads
+                  </label>
+                </div>
+                <div class="text-muted small ms-4">Bilder, Videos, Dokumente</div>
+              </div>
+              <div class="text-end text-muted small">
+                {{ upload_count }} Dateien<br>
+                {% if upload_size >= 1048576 %}{{ "%.1f"|format(upload_size/1048576) }} MB
+                {% else %}{{ "%.0f"|format(upload_size/1024) }} KB{% endif %}
+              </div>
+            </div>
+          </div>
+
+          <div class="card mb-3 border-0 bg-light">
+            <div class="card-body py-2 px-3">
+              <div class="form-check mb-0">
+                <input class="form-check-input" type="checkbox" name="include_config" id="cb_config">
+                <label class="form-check-label fw-semibold" for="cb_config">
+                  <i class="bi bi-file-code me-1 text-secondary"></i>Konfigurationsdateien
+                </label>
+              </div>
+              <div class="text-muted small ms-4">app.py, passenger_wsgi.py, telegram_bot.py, openliga.py, requirements.txt</div>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-success w-100">
+            <i class="bi bi-download me-2"></i>Backup herunterladen (ZIP)
+          </button>
+        </form>
+      </div>
+      <div class="card-footer py-2 small text-muted">
+        <i class="bi bi-lightbulb me-1 text-warning"></i>
+        <strong>Empfehlung:</strong> DB wöchentlich, DB+Medien monatlich, alles vor Code-Updates.
+      </div>
+    </div>
+  </div>
+
+  {# Wiederherstellen #}
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm h-100 border-warning">
+      <div class="card-header bg-warning text-dark">
+        <i class="bi bi-upload me-2"></i>Wiederherstellen
+      </div>
+      <div class="card-body">
+        <div class="alert alert-danger py-2 mb-3 small">
+          <i class="bi bi-exclamation-triangle-fill me-2"></i>
+          <strong>Achtung!</strong> Überschreibt vorhandene Daten.
+          Aktuelle DB wird als <code>.before_restore</code> gesichert.
+        </div>
+
+        <form method="POST" action="{{ url_for('admin_restore') }}"
+              enctype="multipart/form-data"
+              onsubmit="return confirm('Wirklich wiederherstellen? Aktuelle Daten werden überschrieben.')">
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Backup-Datei</label>
+            <input type="file" name="backup_file" class="form-control" accept=".zip,.db" required>
+            <div class="form-text">ZIP-Backup (empfohlen) oder einzelne <code>.db</code>-Datei</div>
+          </div>
+
+          <div class="card border-0 bg-light mb-3">
+            <div class="card-body py-2 px-3 small">
+              <strong class="text-muted">ZIP enthält Konfigdateien?</strong>
+              <div class="form-check mt-1">
+                <input class="form-check-input" type="checkbox" name="include_config" id="restore_config">
+                <label class="form-check-label text-muted" for="restore_config">
+                  Konfigurationsdateien (app.py etc.) auch überschreiben
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-warning w-100">
+            <i class="bi bi-arrow-counterclockwise me-2"></i>Jetzt wiederherstellen
+          </button>
+        </form>
+      </div>
+      <div class="card-footer py-2 small text-muted">
+        <i class="bi bi-shield-check me-1 text-success"></i>
+        DB wird vor Übernahme validiert. Nach Restore automatisch abgemeldet.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{# Strategie #}
+<div class="card shadow-sm mt-4">
+  <div class="card-header"><i class="bi bi-lightbulb me-2 text-warning"></i>Backup-Strategie</div>
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-12 col-md-4">
+        <h6><i class="bi bi-calendar-week me-2 text-success"></i>Wöchentlich</h6>
+        <p class="small text-muted mb-0"><strong>Nur Datenbank</strong> – schnell, klein, enthält alle Tipps und Spielstände.</p>
+      </div>
+      <div class="col-12 col-md-4">
+        <h6><i class="bi bi-calendar-month me-2 text-warning"></i>Monatlich / Saisonstart</h6>
+        <p class="small text-muted mb-0"><strong>DB + Medien</strong> – vollständige Datensicherung inklusive aller Fotos und Dokumente.</p>
+      </div>
+      <div class="col-12 col-md-4">
+        <h6><i class="bi bi-code-slash me-2 text-secondary"></i>Vor Code-Updates</h6>
+        <p class="small text-muted mb-0"><strong>Alles</strong> – DB + Medien + Konfigdateien für vollständiges Rollback.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

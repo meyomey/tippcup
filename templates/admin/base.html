@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row g-0">
+  <!-- Admin Sidebar -->
+  <div class="col-12 col-md-3 col-lg-2 mb-3 mb-md-0">
+    <div class="admin-sidebar card shadow-sm">
+      <div class="card-header bg-dark text-white">
+        <i class="bi bi-gear-fill me-2"></i><strong>Admin</strong>
+      </div>
+      <div class="list-group list-group-flush">
+        <a href="{{ url_for('admin_dashboard') }}"
+           class="list-group-item list-group-item-action {% if request.endpoint == 'admin_dashboard' %}active{% endif %}">
+          <i class="bi bi-speedometer2 me-2"></i>Dashboard
+        </a>
+        <a href="{{ url_for('admin_users') }}"
+           class="list-group-item list-group-item-action {% if 'user' in request.endpoint %}active{% endif %}">
+          <i class="bi bi-people-fill me-2"></i>Benutzer
+        </a>
+        <a href="{{ url_for('admin_teams') }}"
+           class="list-group-item list-group-item-action {% if 'team' in request.endpoint %}active{% endif %}">
+          <i class="bi bi-shield-fill me-2"></i>Teams
+        </a>
+        <a href="{{ url_for('admin_season') }}"
+           class="list-group-item list-group-item-action {% if request.endpoint == 'admin_season' %}active{% endif %}">
+          <i class="bi bi-calendar-fill me-2"></i>Saison
+        </a>
+        <a href="{{ url_for('admin_manual_standings') }}"
+           class="list-group-item list-group-item-action {% if request.endpoint == 'admin_manual_standings' %}active{% endif %}">
+          <i class="bi bi-pencil-square me-2"></i>Manuelle Tabelle
+        </a>
+        <a href="{{ url_for('admin_email') }}"
+           class="list-group-item list-group-item-action {% if request.endpoint == 'admin_email' %}active{% endif %}">
+          <i class="bi bi-envelope-fill me-2"></i>E-Mail / Rundbrief
+        </a>
+        <a href="{{ url_for('admin_telegram') }}"
+           class="list-group-item list-group-item-action {% if request.endpoint == 'admin_telegram' %}active{% endif %}">
+          <i class="bi bi-telegram me-2" style="color:#0088cc"></i>Telegram
+        </a>
+        <a href="{{ url_for('admin_api_config') }}"
+           class="list-group-item list-group-item-action {% if request.endpoint == 'admin_api_config' %}active{% endif %}">
+          <i class="bi bi-key-fill me-2"></i>API-Einstellungen
+        </a>
+        <a href="{{ url_for('admin_security') }}"
+           class="list-group-item list-group-item-action {% if 'security' in request.endpoint %}active{% endif %}">
+          <i class="bi bi-shield-lock-fill me-2"></i>Sicherheit
+        </a>
+        <a href="{{ url_for('admin_backup_page') }}"
+           class="list-group-item list-group-item-action {% if 'backup' in request.endpoint %}active{% endif %}">
+          <i class="bi bi-archive-fill me-2"></i>Backup & Restore
+        </a>
+        <a href="{{ url_for('admin_medien') }}"
+           class="list-group-item list-group-item-action {% if request.endpoint in ('admin_medien','admin_links') %}active{% endif %}">
+          <i class="bi bi-images me-2"></i>Medien & Links
+        </a>
+        <a href="/admin/archiv/import"
+           class="list-group-item list-group-item-action {% if request.endpoint == 'admin_archiv_import' %}active{% endif %}">
+          <i class="bi bi-clock-history me-2"></i>Tipp-Archiv
+        </a>
+        <div class="list-group-item px-3 py-1 text-muted" style="font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;background:transparent">Dokumentation</div>
+        <a href="{{ url_for('admin_handbuch') }}"
+           class="list-group-item list-group-item-action {% if request.endpoint == 'admin_handbuch' %}active{% endif %}">
+          <i class="bi bi-book me-2"></i>Benutzerhandbuch
+        </a>
+        <a href="{{ url_for('admin_doku') }}"
+           class="list-group-item list-group-item-action {% if request.endpoint == 'admin_doku' %}active{% endif %}">
+          <i class="bi bi-file-code me-2"></i>Technische Doku
+        </a>
+        <hr class="my-1">
+        <a href="{{ url_for('dashboard') }}" class="list-group-item list-group-item-action text-muted">
+          <i class="bi bi-arrow-left me-2"></i>Zurück zur App
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="col-12 col-md-9 col-lg-10 ps-md-4">
+    {% block admin_content %}{% endblock %}
+  </div>
+</div>
+{% endblock %}

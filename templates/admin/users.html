@@ -1,0 +1,126 @@
+{% extends "admin/base.html" %}
+{% block title %}Admin – Benutzer{% endblock %}
+
+{% block admin_content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="mb-0"><i class="bi bi-people-fill me-2"></i>Benutzer verwalten
+    <span class="badge bg-secondary ms-2">{{ users|length }} gesamt</span>
+    <span class="badge bg-success ms-1">{{ users|selectattr('is_active','equalto',1)|list|length }} aktiv</span>
+  </h4>
+  <div class="d-flex gap-2">
+    <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#bulkModal">
+      <i class="bi bi-people me-1"></i>Mehrere anlegen
+    </button>
+    <a href="{{ url_for('admin_add_user') }}" class="btn btn-bundesliga btn-sm">
+      <i class="bi bi-person-plus me-1"></i>Benutzer anlegen
+    </a>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>Benutzername</th>
+            <th class="d-none d-md-table-cell">Anzeigename</th>
+            <th class="d-none d-lg-table-cell">E-Mail</th>
+            <th class="text-center">Tipps</th>
+            <th class="text-center d-none d-sm-table-cell">Score</th>
+            <th class="text-center">Status</th>
+            <th class="text-center d-none d-xl-table-cell">Letzter Login</th>
+            <th class="text-center">Aktionen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+          <tr class="{% if not u.is_active %}table-secondary text-muted{% endif %}">
+            <td>
+              {{ u.username }}
+              {% if u.is_admin %}<span class="badge bg-warning text-dark ms-1">Admin</span>{% endif %}
+              {% if not u.is_active %}<span class="badge bg-secondary ms-1">Inaktiv</span>{% endif %}
+            </td>
+            <td class="d-none d-md-table-cell">{{ u.display_name or '–' }}</td>
+            <td class="d-none d-lg-table-cell">
+              {% if u.email %}
+                <a href="mailto:{{ u.email }}" class="text-muted small">{{ u.email }}</a>
+              {% else %}
+                <span class="text-muted small">–</span>
+              {% endif %}
+              {% if u.mobile %}
+                <div class="text-muted small"><i class="bi bi-phone me-1"></i>{{ u.mobile }}</div>
+              {% endif %}
+            </td>
+            <td class="text-center">
+              {% if u.pred_count > 0 %}
+                <span class="badge bg-success">{{ u.pred_count }}</span>
+              {% else %}
+                <span class="text-muted">–</span>
+              {% endif %}
+            </td>
+            <td class="text-center d-none d-sm-table-cell">
+              {% if u.current_score is not none %}
+                <strong>{{ u.current_score }}</strong>
+              {% else %}–{% endif %}
+            </td>
+            <td class="text-center">
+              <span class="badge {% if u.is_active %}bg-success{% else %}bg-secondary{% endif %}">
+                {% if u.is_active %}Aktiv{% else %}Inaktiv{% endif %}
+              </span>
+            </td>
+            <td class="text-center d-none d-xl-table-cell">
+              {% if u.last_login %}
+                {% set ll = u.last_login[:16].replace('T',' ') %}
+                <span class="small text-muted" title="{{ ll }} Uhr">
+                  <i class="bi bi-clock me-1"></i>{{ ll }} Uhr
+                </span>
+              {% else %}
+                <span class="text-muted small">–</span>
+              {% endif %}
+            </td>
+            <td class="text-center">
+              <a href="{{ url_for('admin_edit_user', uid=u.id) }}" class="btn btn-sm btn-outline-secondary me-1">
+                <i class="bi bi-pencil"></i>
+              </a>
+              {% if u.id != session.get('user_id') %}
+              <form method="POST" action="{{ url_for('admin_delete_user', uid=u.id) }}"
+                    class="d-inline" onsubmit="return confirm('{{ u.username }} wirklich löschen?')">
+                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk User Modal -->
+<div class="modal fade" id="bulkModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-bundesliga text-white">
+        <h5 class="modal-title"><i class="bi bi-people me-2"></i>Mehrere Benutzer anlegen</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('admin_bulk_users') }}">
+        <div class="modal-body">
+          <p class="text-muted small">Format: <code>Benutzername:Passwort</code> (ein Eintrag pro Zeile)</p>
+          <textarea name="bulk_data" class="form-control font-monospace" rows="10"
+                    placeholder="max.mustermann:sicher123&#10;erika.muster:passwort456&#10;john.doe:geheim789"></textarea>
+          <div class="form-text">Passwörter müssen mind. 6 Zeichen haben.</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+          <button type="submit" class="btn btn-bundesliga">
+            <i class="bi bi-people-fill me-1"></i>Benutzer anlegen
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

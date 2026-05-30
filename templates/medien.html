@@ -1,0 +1,478 @@
+{% extends "base.html" %}
+{% block title %}Medien{% endblock %}
+
+{% block head %}
+<style>
+/* Lightbox */
+.lightbox-overlay { display:none;position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:9999;align-items:center;justify-content:center;flex-direction:column }
+.lightbox-overlay.open { display:flex }
+.lightbox-media { max-width:92vw;max-height:82vh;object-fit:contain;border-radius:.5rem }
+.lightbox-video { max-width:92vw;max-height:82vh;border-radius:.5rem;outline:none }
+.lightbox-caption { color:#ccc;margin-top:.75rem;font-size:.9rem;text-align:center }
+.lightbox-close { position:absolute;top:1rem;right:1.5rem;color:#fff;font-size:2rem;cursor:pointer;opacity:.7;background:none;border:none;line-height:1 }
+.lightbox-close:hover { opacity:1 }
+.lightbox-nav { position:absolute;top:50%;transform:translateY(-50%);color:#fff;font-size:2.5rem;cursor:pointer;background:none;border:none;padding:.5rem;opacity:.6 }
+.lightbox-nav:hover { opacity:1 }
+.lightbox-prev { left:1rem }
+.lightbox-next { right:1rem }
+/* Bilder */
+.media-img-thumb { width:100%;height:140px;object-fit:cover;cursor:pointer;transition:opacity .15s }
+.media-img-thumb:hover { opacity:.85 }
+/* Video-Thumbnail */
+.media-vid-wrap { position:relative;background:#000;border-radius:.375rem;overflow:hidden }
+.media-vid-play { position:absolute;inset:0;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(0,0,0,.25);transition:background .15s }
+.media-vid-play:hover { background:rgba(0,0,0,.45) }
+.media-vid-play i { font-size:3rem;color:#fff;opacity:.9 }
+/* Audio */
+.media-audio-item { display:flex;align-items:center;gap:.75rem;padding:.6rem .75rem;border-radius:.5rem;background:var(--bs-body-bg);border:1px solid var(--bs-border-color) }
+.media-audio-item audio { flex:1;min-width:0;height:36px }
+.media-audio-label { font-size:.85rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="mb-0"><i class="bi bi-images me-2"></i>Medien</h4>
+  <div class="d-flex gap-2 align-items-center flex-wrap">
+    <select id="folderSort" class="form-select form-select-sm" style="width:auto" onchange="sortFolders()">
+      <option value="name-desc" selected>Name (neu → alt)</option>
+      <option value="name-asc">Name (alt → neu)</option>
+    </select>
+    <button class="btn btn-sm btn-outline-secondary" onclick="collapseAll()" title="Alle zuklappen">
+      <i class="bi bi-arrows-collapse me-1"></i>Alle zuklappen
+    </button>
+    {% if session.get('is_admin') %}
+    <a href="{{ url_for('admin_medien') }}" class="btn btn-sm btn-outline-secondary no-print">
+      <i class="bi bi-gear me-1"></i>Verwalten
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+{% macro folder_type_badges(files) %}
+{% set ns = namespace(img=0, vid=0, aud=0, pdf=0, word=0, excel=0, other=0) %}
+{% for f in files %}
+  {% if f.file_type == 'image' %}{% set ns.img = ns.img + 1 %}
+  {% elif f.file_type == 'video' %}{% set ns.vid = ns.vid + 1 %}
+  {% elif f.file_type == 'audio' %}{% set ns.aud = ns.aud + 1 %}
+  {% elif f.file_type == 'document' %}
+    {% set ext = f.orig_name.rsplit('.',1)[-1].lower() if '.' in f.orig_name else '' %}
+    {% if ext == 'pdf' %}{% set ns.pdf = ns.pdf + 1 %}
+    {% elif ext in ('doc','docx') %}{% set ns.word = ns.word + 1 %}
+    {% elif ext in ('xls','xlsx') %}{% set ns.excel = ns.excel + 1 %}
+    {% else %}{% set ns.other = ns.other + 1 %}{% endif %}
+  {% endif %}
+{% endfor %}
+<span class="d-flex gap-1 flex-nowrap me-2 align-items-center">
+  {% if ns.img %}<span class="badge bg-light text-dark"><i class="bi bi-image me-1"></i>{{ ns.img }}</span>{% endif %}
+  {% if ns.vid %}<span class="badge bg-light text-dark"><i class="bi bi-camera-video me-1"></i>{{ ns.vid }}</span>{% endif %}
+  {% if ns.aud %}<span class="badge bg-light text-dark"><i class="bi bi-music-note-beamed me-1"></i>{{ ns.aud }}</span>{% endif %}
+  {% if ns.pdf %}<span class="badge bg-light text-dark"><i class="bi bi-file-earmark-pdf me-1 text-danger"></i>{{ ns.pdf }}</span>{% endif %}
+  {% if ns.word %}<span class="badge bg-light text-dark"><i class="bi bi-file-earmark-word me-1 text-info"></i>{{ ns.word }}</span>{% endif %}
+  {% if ns.excel %}<span class="badge bg-light text-dark"><i class="bi bi-file-earmark-excel me-1 text-success"></i>{{ ns.excel }}</span>{% endif %}
+  {% if ns.other %}<span class="badge bg-light text-dark"><i class="bi bi-file-earmark me-1"></i>{{ ns.other }}</span>{% endif %}
+</span>
+{% endmacro %}
+
+{% macro render_files(files, fid_prefix) %}
+{% set images = files | selectattr('file_type','equalto','image') | list %}
+{% set videos = files | selectattr('file_type','equalto','video') | list %}
+{% set audios = files | selectattr('file_type','equalto','audio') | list %}
+{% set docs   = files | selectattr('file_type','equalto','document') | list %}
+
+{# Dokumente #}
+{% if docs %}
+<div class="list-group list-group-flush {{ 'border rounded mb-3' if (images or videos or audios) else 'border-0' }}">
+  {% for doc in docs %}
+  {% set ext = doc.orig_name.rsplit('.',1)[-1].lower() if '.' in doc.orig_name else '' %}
+  {% set ftype = 'pdf' if ext=='pdf' else ('word' if ext in ('doc','docx') else ('excel' if ext in ('xls','xlsx') else 'other_doc')) %}
+  <a href="{{ url_for('media_file', filename=doc.filename) }}" target="_blank"
+     class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-2"
+     data-filetype="{{ ftype }}">
+    <span class="fs-4">
+      {% set ext = doc.orig_name.rsplit('.',1)[-1].lower() if '.' in doc.orig_name else '' %}
+      {% if ext=='pdf' %}📄{% elif ext in ('doc','docx') %}📝{% elif ext in ('xls','xlsx') %}📊{% elif ext in ('ppt','pptx') %}📑{% elif ext=='zip' %}🗜️{% else %}📎{% endif %}
+    </span>
+    <div class="flex-grow-1 min-width-0">
+      <div class="fw-semibold text-truncate">{{ doc.title or doc.orig_name }}</div>
+      <div class="text-muted small">{{ ext.upper() }} ·
+        {% if doc.file_size >= 1048576 %}{{ '%.1f'|format(doc.file_size/1048576) }} MB
+        {% else %}{{ '%.0f'|format(doc.file_size/1024) }} KB{% endif %}
+      </div>
+    </div>
+    <i class="bi bi-download text-muted"></i>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# Bilder #}
+{% if images %}
+<div class="row g-2 {{ 'mb-3' if (videos or audios) else '' }}">
+  {% for img in images %}
+  <div class="col-6 col-sm-4 col-md-3 col-xl-2" data-filetype="image">
+    <div class="rounded overflow-hidden shadow-sm">
+      <img src="{{ url_for('media_file', filename=img.filename) }}"
+           alt="{{ img.title or img.orig_name }}"
+           class="media-img-thumb w-100" loading="lazy"
+           onclick="openLightbox(this)"
+           data-src="{{ url_for('media_file', filename=img.filename) }}"
+           data-caption="{{ img.title or img.orig_name }}"
+           data-type="image">
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# Videos #}
+{% if videos %}
+<div class="row g-2 {{ 'mb-3' if audios else '' }}">
+  {% for vid in videos %}
+  <div class="col-12 col-sm-6 col-lg-4" data-filetype="video">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="media-vid-wrap" style="height:200px"
+           onclick="openLightbox(this)"
+           data-src="{{ url_for('media_file', filename=vid.filename) }}"
+           data-caption="{{ vid.title or vid.orig_name }}"
+           data-type="video"
+           data-ext="{{ vid.orig_name.rsplit('.',1)[-1].lower() if '.' in vid.orig_name else 'mp4' }}"
+           style="height:200px;cursor:pointer">
+        <video muted preload="metadata"
+               style="width:100%;height:200px;object-fit:cover;display:block;pointer-events:none">
+          <source src="{{ url_for('media_file', filename=vid.filename) }}#t=0.5">
+        </video>
+        <div class="media-vid-play">
+          <i class="bi bi-play-circle-fill"></i>
+        </div>
+      </div>
+      <div class="card-body py-2 px-2">
+        <div class="small fw-semibold text-truncate">{{ vid.title or vid.orig_name }}</div>
+        <div class="text-muted" style="font-size:.7rem">
+          {{ vid.orig_name.rsplit('.',1)[-1].upper() if '.' in vid.orig_name else 'VIDEO' }} ·
+          {% if vid.file_size >= 1048576 %}{{ '%.1f'|format(vid.file_size/1048576) }} MB{% else %}{{ '%.0f'|format(vid.file_size/1024) }} KB{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# Audio #}
+{% if audios %}
+<div class="d-flex flex-column gap-2">
+  {% for aud in audios %}
+  <div data-filetype="audio">
+  <div class="media-audio-item">
+    <i class="bi bi-music-note-beamed fs-4 text-primary flex-shrink-0"></i>
+    <div class="flex-grow-1 min-width-0">
+      <div class="media-audio-label">{{ aud.title or aud.orig_name }}</div>
+      <audio controls preload="metadata" style="width:100%;height:36px;margin-top:4px">
+        <source src="{{ url_for('media_file', filename=aud.filename) }}">
+      </audio>
+    </div>
+    <a href="{{ url_for('media_file', filename=aud.filename) }}" download
+       class="btn btn-sm btn-outline-secondary ms-1" title="Herunterladen">
+      <i class="bi bi-download"></i>
+    </a>
+  </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endmacro %}
+
+<!-- Statistik-Übersicht -->
+{% set total = media_stats.image + media_stats.video + media_stats.audio + media_stats.pdf + media_stats.word + media_stats.excel + media_stats.other_doc %}
+{% if total > 0 %}
+<style>
+.filter-badge { cursor:pointer; transition: box-shadow .15s, opacity .15s; user-select:none }
+.filter-badge:hover { opacity:.85 }
+.filter-badge.active-filter { box-shadow: 0 0 0 3px currentColor; opacity:1 }
+</style>
+<div class="d-flex flex-wrap gap-2 mb-3" id="statsBar">
+  {% if media_stats.image %}
+  <span class="badge rounded-pill bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-3 py-2 fs-6 fw-normal filter-badge" data-filter="image" onclick="toggleFilter(this)">
+    <i class="bi bi-image me-1"></i>{{ media_stats.image }} Bild{{ 'er' if media_stats.image != 1 else '' }}
+  </span>
+  {% endif %}
+  {% if media_stats.pdf %}
+  <span class="badge rounded-pill bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 px-3 py-2 fs-6 fw-normal filter-badge" data-filter="pdf" onclick="toggleFilter(this)">
+    <i class="bi bi-file-earmark-pdf me-1"></i>{{ media_stats.pdf }} PDF{{ '' if media_stats.pdf == 1 else 's' }}
+  </span>
+  {% endif %}
+  {% if media_stats.word %}
+  <span class="badge rounded-pill bg-info bg-opacity-10 text-info border border-info border-opacity-25 px-3 py-2 fs-6 fw-normal filter-badge" data-filter="word" onclick="toggleFilter(this)">
+    <i class="bi bi-file-earmark-word me-1"></i>{{ media_stats.word }} Word{{ '-Datei' if media_stats.word == 1 else '-Dateien' }}
+  </span>
+  {% endif %}
+  {% if media_stats.excel %}
+  <span class="badge rounded-pill bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-3 py-2 fs-6 fw-normal filter-badge" data-filter="excel" onclick="toggleFilter(this)">
+    <i class="bi bi-file-earmark-excel me-1"></i>{{ media_stats.excel }} Excel{{ '-Datei' if media_stats.excel == 1 else '-Dateien' }}
+  </span>
+  {% endif %}
+  {% if media_stats.video %}
+  <span class="badge rounded-pill bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 px-3 py-2 fs-6 fw-normal filter-badge" data-filter="video" onclick="toggleFilter(this)">
+    <i class="bi bi-camera-video me-1"></i>{{ media_stats.video }} Video{{ '' if media_stats.video == 1 else 's' }}
+  </span>
+  {% endif %}
+  {% if media_stats.audio %}
+  <span class="badge rounded-pill bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-3 py-2 fs-6 fw-normal filter-badge" data-filter="audio" onclick="toggleFilter(this)">
+    <i class="bi bi-music-note-beamed me-1"></i>{{ media_stats.audio }} Audio{{ '-Datei' if media_stats.audio == 1 else '-Dateien' }}
+  </span>
+  {% endif %}
+  {% if media_stats.other_doc %}
+  <span class="badge rounded-pill bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-3 py-2 fs-6 fw-normal filter-badge" data-filter="other_doc" onclick="toggleFilter(this)">
+    <i class="bi bi-file-earmark me-1"></i>{{ media_stats.other_doc }} Sonst.
+  </span>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Ordner -->
+<div id="folderList">
+{% for folder in folders %}
+{% set files = folder_files.get(folder.id, []) %}
+{% if files %}
+{% set fid = 'folder-' ~ folder.id %}
+{% set is_open = (folder.id == newest_folder_id) %}
+<div class="card shadow-sm mb-3 media-folder-card" data-name="{{ folder.name | lower }}">
+  <div class="card-header bg-bundesliga text-white d-flex align-items-center"
+       style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#{{ fid }}"
+       aria-expanded="{{ 'true' if is_open else 'false' }}">
+    <i class="bi bi-folder-fill me-2"></i>
+    <span class="flex-grow-1">{{ folder.name }}
+      {% if folder.description %}<small class="ms-2 opacity-75">{{ folder.description }}</small>{% endif %}
+    </span>
+    {{ folder_type_badges(files) }}
+    <i class="bi bi-chevron-down collapse-chevron" style="transition:transform .2s"></i>
+  </div>
+  <div class="collapse {% if is_open %}show{% endif %}" id="{{ fid }}">
+    <div class="card-body">
+      {{ render_files(files, fid) }}
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endfor %}
+</div><!-- /folderList -->
+
+<!-- Dateien ohne Ordner -->
+{% if unassigned %}
+<div class="card shadow-sm mb-3 media-folder-card">
+  <div class="card-header bg-secondary text-white d-flex align-items-center"
+       style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#folder-unassigned"
+       aria-expanded="false">
+    <i class="bi bi-files me-2"></i>
+    <span class="flex-grow-1">Weitere Dateien</span>
+    {{ folder_type_badges(unassigned) }}
+    <i class="bi bi-chevron-down collapse-chevron" style="transition:transform .2s"></i>
+  </div>
+  <div class="collapse" id="folder-unassigned">
+    <div class="card-body">
+      {{ render_files(unassigned, 'unassigned') }}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Externe Links -->
+{% if ext_links %}
+<div class="card shadow-sm mb-3">
+  <div class="card-header bg-dark text-white d-flex align-items-center"
+       style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#ext-links-collapse"
+       aria-expanded="true">
+    <i class="bi bi-link-45deg me-2"></i>
+    <span class="flex-grow-1">Externe Links</span>
+    <span class="badge bg-light text-dark me-2">{{ ext_links|length }}</span>
+    <i class="bi bi-chevron-down collapse-chevron" style="transition:transform .2s"></i>
+  </div>
+  <div class="collapse show" id="ext-links-collapse">
+    <div class="list-group list-group-flush">
+      {% for lnk in ext_links %}
+      <a href="{{ lnk.url }}" target="_blank" rel="noopener"
+         class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-2">
+        <i class="bi {{ lnk.icon }} fs-4 text-primary"></i>
+        <div class="flex-grow-1">
+          <div class="fw-semibold">{{ lnk.title }}</div>
+          {% if lnk.description %}<div class="text-muted small">{{ lnk.description }}</div>{% endif %}
+        </div>
+        <i class="bi bi-box-arrow-up-right text-muted small"></i>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if not folders and not unassigned and not ext_links %}
+<div class="card shadow-sm">
+  <div class="card-body text-center py-5 text-muted">
+    <i class="bi bi-images fs-1"></i>
+    <h5 class="mt-3">Noch keine Medien vorhanden</h5>
+    {% if session.get('is_admin') %}
+    <a href="{{ url_for('admin_medien') }}" class="btn btn-bundesliga mt-2">
+      <i class="bi bi-cloud-upload me-2"></i>Dateien hochladen
+    </a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Lightbox (Bilder + Videos) -->
+<div class="lightbox-overlay" id="lightbox" onclick="closeLightboxBg(event)">
+  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+  <button class="lightbox-nav lightbox-prev" onclick="lightboxNav(-1)">‹</button>
+  <button class="lightbox-nav lightbox-next" onclick="lightboxNav(1)">›</button>
+  <img  class="lightbox-media" id="lightboxImg" src="" alt="" style="display:none">
+  <video class="lightbox-video" id="lightboxVid" controls style="display:none"></video>
+  <div class="lightbox-caption" id="lightboxCaption"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let lbItems = [], lbIdx = 0;
+let touchStartX = 0, touchStartY = 0;
+
+// Alle Lightbox-fähigen Elemente sammeln
+function collectLbItems() {
+  lbItems = Array.from(document.querySelectorAll('[data-type="image"],[data-type="video"]'));
+}
+
+function openLightbox(el) {
+  collectLbItems();
+  lbIdx = lbItems.indexOf(el);
+  showLbItem();
+  document.getElementById('lightbox').classList.add('open');
+  document.addEventListener('keydown', lbKey);
+}
+
+function showLbItem() {
+  const el   = lbItems[lbIdx];
+  const type = el.dataset.type;
+  const src  = el.dataset.src;
+  const cap  = el.dataset.caption || '';
+  const img  = document.getElementById('lightboxImg');
+  const vid  = document.getElementById('lightboxVid');
+  document.getElementById('lightboxCaption').textContent = cap;
+
+  if (type === 'video') {
+    img.style.display = 'none';
+    vid.style.display = 'block';
+    vid.pause();
+    // Source neu setzen
+    vid.innerHTML = `<source src="${src}">`;
+    vid.load();
+    vid.play().catch(() => {});
+  } else {
+    vid.pause();
+    vid.style.display = 'none';
+    img.style.display = 'block';
+    img.src = src;
+    img.alt = cap;
+  }
+}
+
+function closeLightbox() {
+  const vid = document.getElementById('lightboxVid');
+  vid.pause();
+  document.getElementById('lightbox').classList.remove('open');
+  document.removeEventListener('keydown', lbKey);
+}
+
+function closeLightboxBg(e) {
+  if (e.target === document.getElementById('lightbox')) closeLightbox();
+}
+
+function lightboxNav(dir) {
+  lbIdx = (lbIdx + dir + lbItems.length) % lbItems.length;
+  showLbItem();
+}
+
+function lbKey(e) {
+  if (e.key === 'Escape')     closeLightbox();
+  if (e.key === 'ArrowLeft')  lightboxNav(-1);
+  if (e.key === 'ArrowRight') lightboxNav(1);
+}
+
+// Touch-Swipe
+const lb = document.getElementById('lightbox');
+lb.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY; }, {passive:true});
+lb.addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  const dy = e.changedTouches[0].clientY - touchStartY;
+  if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) lightboxNav(dx < 0 ? 1 : -1);
+  else if (dy > 80) closeLightbox();
+}, {passive:true});
+
+// Chevron-Animation
+document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(header => {
+  const target  = document.querySelector(header.dataset.bsTarget);
+  const chevron = header.querySelector('.collapse-chevron');
+  if (!target || !chevron) return;
+  chevron.style.transform = target.classList.contains('show') ? 'rotate(180deg)' : '';
+  target.addEventListener('show.bs.collapse', () => chevron.style.transform = 'rotate(180deg)');
+  target.addEventListener('hide.bs.collapse', () => chevron.style.transform = '');
+});
+
+// ── Sortierung & Zuklappen ────────────────────────────────────
+function sortFolders() {
+  const dir = document.getElementById('folderSort').value;
+  const list = document.getElementById('folderList');
+  if (!list) return;
+  const cards = Array.from(list.querySelectorAll(':scope > .media-folder-card'));
+  cards.sort((a, b) => {
+    const na = a.dataset.name || '';
+    const nb = b.dataset.name || '';
+    return dir === 'name-asc' ? na.localeCompare(nb) : nb.localeCompare(na);
+  });
+  cards.forEach(c => list.appendChild(c));
+}
+
+function collapseAll() {
+  document.querySelectorAll('.media-folder-card .collapse.show').forEach(el => {
+    bootstrap.Collapse.getOrCreateInstance(el).hide();
+  });
+}
+
+// Standard-Sortierung beim Laden
+sortFolders();
+
+// ── Typ-Filter über Stats-Badges ─────────────────────────────
+let activeFilter = null;
+
+function toggleFilter(badge) {
+  const type = badge.dataset.filter;
+  // Nochmals klicken → Filter aufheben
+  if (activeFilter === type) {
+    activeFilter = null;
+    document.querySelectorAll('.filter-badge').forEach(b => b.classList.remove('active-filter'));
+    document.querySelectorAll('[data-filetype]').forEach(el => el.style.display = '');
+    document.querySelectorAll('.media-folder-card').forEach(card => card.style.display = '');
+    return;
+  }
+  activeFilter = type;
+  // Badge hervorheben
+  document.querySelectorAll('.filter-badge').forEach(b =>
+    b.classList.toggle('active-filter', b.dataset.filter === type));
+  // Alle Dateielemente zeigen/verbergen
+  document.querySelectorAll('[data-filetype]').forEach(el => {
+    el.style.display = el.dataset.filetype === type ? '' : 'none';
+  });
+  // Ordner-Karten: verbergen wenn kein passender Inhalt, sonst aufklappen
+  document.querySelectorAll('.media-folder-card').forEach(card => {
+    const hasMatch = Array.from(card.querySelectorAll('[data-filetype]'))
+      .some(el => el.dataset.filetype === type);
+    card.style.display = hasMatch ? '' : 'none';
+    if (hasMatch) {
+      const collapseEl = card.querySelector('.collapse');
+      if (collapseEl && !collapseEl.classList.contains('show')) {
+        bootstrap.Collapse.getOrCreateInstance(collapseEl).show();
+      }
+    }
+  });
+}
+</script>
+{% endblock %}

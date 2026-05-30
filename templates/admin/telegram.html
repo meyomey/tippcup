@@ -1,0 +1,219 @@
+{% extends "admin/base.html" %}
+{% block title %}Admin – Telegram{% endblock %}
+{% block admin_content %}
+<h4 class="mb-4"><i class="bi bi-telegram me-2" style="color:#0088cc"></i>Telegram-Integration</h4>
+
+<!-- Status -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-info-circle me-2"></i>Bot-Status</span>
+    <span class="badge {% if bot_info %}bg-success{% else %}bg-secondary{% endif %}">
+      {% if bot_info %}✓ Verbunden{% else %}Nicht konfiguriert{% endif %}
+    </span>
+  </div>
+  <div class="card-body">
+    {% if bot_info %}
+    <div class="d-flex align-items-center gap-3">
+      <div style="font-size:2.5rem">🤖</div>
+      <div>
+        <div class="fw-bold">{{ bot_info.first_name }}</div>
+        <div class="text-muted small">@{{ bot_info.username }}</div>
+        <a href="https://t.me/{{ bot_info.username }}" target="_blank" class="btn btn-sm btn-outline-secondary mt-1">
+          <i class="bi bi-box-arrow-up-right me-1"></i>Bot öffnen
+        </a>
+      </div>
+    </div>
+    {% else %}
+    <p class="text-muted mb-0">Noch kein Bot konfiguriert. Bot-Token unten eintragen.</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Konfiguration -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header"><i class="bi bi-gear me-2"></i>Konfiguration</div>
+  <div class="card-body">
+    <form method="POST">
+      <input type="hidden" name="action" value="save">
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Bot-Token
+          <a href="https://t.me/BotFather" target="_blank" class="text-muted small ms-2">
+            <i class="bi bi-box-arrow-up-right me-1"></i>Bei @BotFather erstellen
+          </a>
+        </label>
+        <div class="input-group">
+          <input type="password" name="telegram_token" id="tgToken" class="form-control font-monospace"
+                 value="{{ telegram_token }}" placeholder="123456789:AABBccDDeeFF..." autocomplete="off">
+          <button type="button" class="btn btn-outline-secondary"
+                  onclick="var i=document.getElementById('tgToken');i.type=i.type==='password'?'text':'password'">
+            <i class="bi bi-eye"></i>
+          </button>
+        </div>
+        <div class="form-text">Den Token bekommst du von @BotFather in Telegram.</div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Gruppen-Chat-ID</label>
+        <input type="text" name="telegram_chat_id" class="form-control font-monospace"
+               value="{{ telegram_chat_id }}" placeholder="-1001234567890">
+        <div class="form-text">
+          Negative Zahl für Gruppen. Herausfinden: Bot in Gruppe hinzufügen,
+          dann <code>https://api.telegram.org/bot{TOKEN}/getUpdates</code> aufrufen.
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">
+          Gruppen-Einladungslink
+          <span class="badge bg-warning text-dark ms-1">Für Navbar erforderlich</span>
+        </label>
+        <input type="url" name="telegram_group_link" class="form-control"
+               value="{{ telegram_group_link }}" placeholder="https://t.me/+abc123...">
+        <div class="form-text">
+          <i class="bi bi-info-circle me-1"></i>
+          Dieser Link erscheint im Navigationsmenü — damit können alle Mitspieler die Gruppe öffnen.<br>
+          In Telegram: Gruppe öffnen → Gruppenname antippen → <strong>Einladen per Link</strong> → Link kopieren.
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary">
+        <i class="bi bi-save me-1"></i>Speichern
+      </button>
+    </form>
+  </div>
+</div>
+
+
+<!-- Benachrichtigungs-Einstellungen -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header"><i class="bi bi-sliders me-2"></i>Automatische Benachrichtigungen</div>
+  <div class="card-body">
+    <p class="text-muted small mb-3">
+      Diese Nachrichten werden automatisch an die Telegram-Gruppe gesendet.
+      Rangliste und Spieltag-Highlight werden nur gesendet wenn <strong>alle Spiele des Spieltags abgeschlossen</strong> sind.
+    </p>
+    <form method="POST">
+      <input type="hidden" name="action" value="save">
+      <!-- Token/Chat-ID/Link unsichtbar mitsenden damit sie nicht gelöscht werden -->
+      <input type="hidden" name="telegram_token" value="{{ telegram_token }}">
+      <input type="hidden" name="telegram_chat_id" value="{{ telegram_chat_id }}">
+      <input type="hidden" name="telegram_group_link" value="{{ telegram_group_link }}">
+
+      <div class="list-group list-group-flush">
+        <label class="list-group-item d-flex gap-3 align-items-center px-0">
+          <input type="checkbox" name="notify_rangliste" class="form-check-input flex-shrink-0"
+                 {% if settings.notify_rangliste %}checked{% endif %}>
+          <span>
+            <span class="fw-semibold">🏆 Rangliste nach vollständigem Spieltag</span><br>
+            <span class="text-muted small">
+              Postet die aktuelle Top-3 in die Gruppe sobald alle Spiele eines Spieltags abgeschlossen sind.
+            </span>
+          </span>
+        </label>
+        <label class="list-group-item d-flex gap-3 align-items-center px-0">
+          <input type="checkbox" name="notify_highlight" class="form-check-input flex-shrink-0"
+                 {% if settings.notify_highlight %}checked{% endif %}>
+          <span>
+            <span class="fw-semibold">⚽ Spieltag-Highlight</span><br>
+            <span class="text-muted small">
+              Meldet den besten Tipper des Spieltags nach Abschluss aller Spiele.
+            </span>
+          </span>
+        </label>
+        <label class="list-group-item d-flex gap-3 align-items-center px-0">
+          <input type="checkbox" name="notify_deadline" class="form-check-input flex-shrink-0"
+                 {% if settings.notify_deadline %}checked{% endif %}>
+          <span>
+            <span class="fw-semibold">⏰ Tippschluss-Erinnerung</span><br>
+            <span class="text-muted small">
+              Wird manuell ausgelöst (Schaltfläche unten) — zeigt wer noch nicht getippt hat.
+            </span>
+          </span>
+        </label>
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm mt-3">
+        <i class="bi bi-save me-1"></i>Einstellungen speichern
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Aktionen -->
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card h-100 border-success">
+      <div class="card-body">
+        <h6><i class="bi bi-send me-2"></i>Test-Nachricht</h6>
+        <p class="small text-muted">Sendet eine Testnachricht an die Gruppe.</p>
+        <form method="POST">
+          <input type="hidden" name="action" value="test">
+          <button class="btn btn-sm btn-success" {% if not telegram_token %}disabled{% endif %}>
+            <i class="bi bi-send me-1"></i>Test senden
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card h-100 border-primary">
+      <div class="card-body">
+        <h6><i class="bi bi-plug me-2"></i>Bot-Befehle (Webhook)</h6>
+        <p class="small text-muted">
+          Damit Mitspieler in der Gruppe Befehle eingeben können:<br>
+          <code>/rangliste</code>, <code>/spieltag</code>, <code>/help</code><br>
+          <span class="text-muted" style="font-size:.75rem">
+            Unabhängig von den automatischen Nachrichten — nur nötig wenn ihr Befehle nutzen möchtet.
+          </span>
+        </p>
+        <div class="d-flex gap-2">
+          <form method="POST">
+            <input type="hidden" name="action" value="set_webhook">
+            <button class="btn btn-sm btn-primary" {% if not telegram_token %}disabled{% endif %}>
+              <i class="bi bi-plug me-1"></i>Aktivieren
+            </button>
+          </form>
+          <form method="POST">
+            <input type="hidden" name="action" value="delete_webhook">
+            <button class="btn btn-sm btn-outline-secondary" {% if not telegram_token %}disabled{% endif %}>
+              Entfernen
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card h-100 border-warning">
+      <div class="card-body">
+        <h6><i class="bi bi-bell me-2"></i>Tippschluss-Erinnerung</h6>
+        <p class="small text-muted">Sendet Erinnerung mit Liste wer noch nicht getippt hat.</p>
+        <form method="POST">
+          <input type="hidden" name="action" value="notify_deadline">
+          <button class="btn btn-sm btn-warning" {% if not telegram_token or not season or not settings.notify_deadline %}disabled title="Deaktiviert in Einstellungen"{% endif %}>
+            <i class="bi bi-bell me-1"></i>Erinnerung senden
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Setup-Anleitung -->
+<div class="card shadow-sm">
+  <div class="card-header"><i class="bi bi-book me-2"></i>Einrichtung (5 Minuten)</div>
+  <div class="card-body">
+    <ol class="mb-0">
+      <li class="mb-2">Öffne Telegram und suche <strong>@BotFather</strong></li>
+      <li class="mb-2">Sende <code>/newbot</code> → Name eingeben → <strong>Token kopieren</strong></li>
+      <li class="mb-2">Erstelle eine Telegram-Gruppe für deine Mitspieler</li>
+      <li class="mb-2">Füge deinen Bot als Mitglied zur Gruppe hinzu</li>
+      <li class="mb-2">Sende in der Gruppe eine beliebige Nachricht, dann rufe auf:<br>
+        <code>https://api.telegram.org/bot<em>TOKEN</em>/getUpdates</code><br>
+        → In der Antwort findest du die <strong>chat.id</strong> (negative Zahl für Gruppen)
+      </li>
+      <li class="mb-2">Token und Chat-ID oben eintragen → <strong>Speichern</strong></li>
+      <li class="mb-0">„Test senden" klicken → Nachricht sollte in der Gruppe erscheinen ✓</li>
+    </ol>
+  </div>
+</div>
+{% endblock %}

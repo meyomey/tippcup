@@ -1,0 +1,467 @@
+{% extends "base.html" %}
+{% block title %}Chat{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+
+  <!-- Chat-Fenster -->
+  <div class="col-12 col-lg-9">
+    <div class="card shadow-sm d-flex flex-column" style="height:calc(100vh - 160px);min-height:450px">
+      <div class="card-header bg-bundesliga text-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-chat-dots-fill me-2"></i>Tippcup Chat</span>
+        <span class="badge bg-light text-dark" id="online-badge">
+          <i class="bi bi-circle-fill text-success me-1" style="font-size:.5rem"></i>
+          <span id="online-count">–</span> online
+        </span>
+      </div>
+
+      <!-- Aktive Umfrage -->
+      <div id="poll-banner" class="d-none border-bottom bg-light px-3 py-2"></div>
+
+      <!-- Nachrichten -->
+      <div class="flex-grow-1 overflow-auto p-3" id="chat-messages" style="background:var(--chat-bg,#f8f9fa)">
+        {% for msg in messages %}
+        <div class="chat-msg {% if msg.user_id == session.get('user_id') %}chat-own{% else %}chat-other{% endif %}"
+             data-id="{{ msg.id }}">
+          <div class="chat-bubble">
+            {% if msg.user_id != session.get('user_id') %}
+            <div class="chat-sender">
+              {% if msg.is_admin %}<i class="bi bi-shield-fill text-warning me-1"></i>{% endif %}
+              {{ msg.display_name or msg.username }}
+            </div>
+            {% endif %}
+            {% if msg.reply_to_id and msg.reply_text %}
+            <div class="chat-quote">
+              <div class="reply-sender" {% if msg.user_id == session.get('user_id') %}style="color:rgba(0,0,0,.85)"{% else %}style="color:#2d6e42"{% endif %}>{{ msg.reply_name or '?' }}</div>
+              <div class="reply-text text-truncate" {% if msg.user_id == session.get('user_id') %}style="color:rgba(0,0,0,.6)"{% else %}style="color:#444"{% endif %}>{{ msg.reply_text[:80] }}{% if msg.reply_text|length > 80 %}…{% endif %}</div>
+            </div>
+            {% endif %}
+            <div class="chat-text">{{ msg.message }}</div>
+            <div class="chat-meta d-flex align-items-center gap-2 mt-1">
+              <span class="chat-time">{{ msg.created_at|localtime }} Uhr</span>
+              <button class="btn-reply text-muted" onclick="startReply({{ msg.id }}, '{{ (msg.display_name or msg.username)|e }}', '{{ msg.message[:60]|e }}')"
+                      title="Antworten" style="background:none;border:none;padding:0;font-size:.75rem;cursor:pointer">
+                <i class="bi bi-reply"></i>
+              </button>
+              <!-- Reaktionen -->
+              <span class="reaction-group">
+                <button class="btn-react {% if msg.id in my_reactions and my_reactions[msg.id]=='👍' %}active{% endif %}"
+                        data-mid="{{ msg.id }}" data-emoji="👍" onclick="react(this)">
+                  👍 <span class="react-count" data-mid="{{ msg.id }}" data-emoji="👍">{{ reactions.get(msg.id,{}).get('👍',0) or '' }}</span>
+                </button>
+                <button class="btn-react {% if msg.id in my_reactions and my_reactions[msg.id]=='👎' %}active{% endif %}"
+                        data-mid="{{ msg.id }}" data-emoji="👎" onclick="react(this)">
+                  👎 <span class="react-count" data-mid="{{ msg.id }}" data-emoji="👎">{{ reactions.get(msg.id,{}).get('👎',0) or '' }}</span>
+                </button>
+              </span>
+              {% if session.get('is_admin') %}
+              <button class="btn-del-msg" onclick="deleteMsg({{ msg.id }}, this)" title="Löschen">
+                <i class="bi bi-x"></i>
+              </button>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+        <div id="chat-end"></div>
+      </div>
+
+      <!-- Eingabe -->
+      <div class="card-footer p-2">
+        {% if session.get('is_admin') %}
+        <div class="mb-2 d-flex gap-2">
+          <button class="btn btn-sm btn-outline-secondary" id="pollToggleBtn"
+                  onclick="document.getElementById('pollForm').classList.toggle('d-none')">
+            <i class="bi bi-bar-chart-fill me-1"></i>Umfrage erstellen
+          </button>
+        </div>
+        <div id="pollForm" class="d-none mb-2 p-2 rounded border bg-light">
+          <input type="text" id="pollQuestion" class="form-control form-control-sm mb-2"
+                 placeholder="Frage eingeben…" maxlength="200">
+          <div id="pollOptions">
+            <input type="text" class="form-control form-control-sm mb-1 poll-opt" placeholder="Option 1">
+            <input type="text" class="form-control form-control-sm mb-1 poll-opt" placeholder="Option 2">
+          </div>
+          <div class="d-flex gap-2 mt-1">
+            <button class="btn btn-sm btn-outline-secondary" onclick="addPollOption()">
+              <i class="bi bi-plus"></i> Option
+            </button>
+            <button class="btn btn-sm btn-bundesliga" onclick="createPoll()">
+              <i class="bi bi-send me-1"></i>Starten
+            </button>
+            <button class="btn btn-sm btn-outline-danger ms-auto" onclick="closePoll()">
+              Umfrage beenden
+            </button>
+          </div>
+        </div>
+        {% endif %}
+        <!-- Zitat-Vorschau -->
+        <div id="replyPreview" class="d-none mb-2 p-2 rounded d-flex justify-content-between align-items-start" style="border-left:3px solid #2d7a47;background:#eaf3ed">
+          <div class="small overflow-hidden me-2">
+            <span class="fw-semibold d-block" id="replyPreviewName" style="color:#2d7a47"></span>
+            <div class="text-truncate" id="replyPreviewText" style="color:#444;max-width:300px"></div>
+          </div>
+          <button type="button" class="btn-close btn-sm ms-2 flex-shrink-0" onclick="cancelReply()"></button>
+        </div>
+        <form id="chat-form" class="d-flex gap-2">
+          <input type="hidden" id="reply-to-id" value="">
+          <input type="text" id="chat-input" class="form-control"
+                 placeholder="Nachricht eingeben…" maxlength="500"
+                 autocomplete="on" autocorrect="on" inputmode="text" autofocus>
+          <button type="submit" class="btn btn-bundesliga">
+            <i class="bi bi-send-fill"></i>
+          </button>
+        </form>
+        <div class="d-flex justify-content-between mt-1">
+          <small class="text-muted" id="char-count">0/500</small>
+          <small class="text-muted">Enter zum Senden</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Seitenleiste -->
+  <div class="col-12 col-lg-3">
+    <div class="card shadow-sm mb-3">
+      <div class="card-header bg-success text-white">
+        <i class="bi bi-people-fill me-2"></i>Online
+      </div>
+      <div id="online-list" class="list-group list-group-flush">
+        {% for u in online %}
+        <div class="list-group-item py-2 d-flex align-items-center gap-2">
+          <i class="bi bi-circle-fill text-success" style="font-size:.5rem"></i>
+          <span class="small">{{ u.display_name or u.username }}</span>
+        </div>
+        {% else %}
+        <div class="list-group-item py-2 text-muted small">Niemand online</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Aktive Umfrage in Sidebar -->
+    <div id="poll-sidebar" class="card shadow-sm d-none">
+      <div class="card-header bg-warning text-dark">
+        <i class="bi bi-bar-chart-fill me-2"></i>Aktive Umfrage
+      </div>
+      <div class="card-body" id="poll-sidebar-body"></div>
+    </div>
+
+    <div class="card shadow-sm mt-3">
+      <div class="card-body py-2">
+        <p class="small text-muted mb-0">
+          <i class="bi bi-info-circle me-1"></i>Bleibt fair und respektvoll.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const ME      = {{ session.get('user_id')|tojson }};
+  const IS_ADMIN= {{ 'true' if session.get('is_admin') else 'false' }};
+  let lastId    = {{ messages[-1].id if messages else 0 }};
+  const chatBox = document.getElementById('chat-messages');
+  const chatInput = document.getElementById('chat-input');
+
+  // ── Scroll ───────────────────────────────────
+  function scrollToBottom(force) {
+    const near = chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 150;
+    if (force || near) chatBox.scrollTop = chatBox.scrollHeight;
+  }
+  scrollToBottom(true);
+
+  function escHtml(t) {
+    return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ── Reply / Zitieren ─────────────────────────
+  window.startReply = function(id, name, text) {
+    document.getElementById('reply-to-id').value = id;
+    document.getElementById('replyPreviewName').textContent = name;
+    document.getElementById('replyPreviewText').textContent = text;
+    const prev = document.getElementById('replyPreview');
+    const dark = document.documentElement.dataset.theme === 'dark';
+    prev.style.background   = dark ? '#1a2a1e' : '#eaf3ed';
+    prev.style.borderColor  = dark ? '#72c48a' : '#2d7a47';
+    document.getElementById('replyPreviewName').style.color = dark ? '#72c48a' : '#2d7a47';
+    document.getElementById('replyPreviewText').style.color = dark ? '#aaa'    : '#444';
+    prev.classList.remove('d-none');
+    document.getElementById('chat-input').focus();
+  };
+  window.cancelReply = function() {
+    document.getElementById('reply-to-id').value = '';
+    document.getElementById('replyPreview').classList.add('d-none');
+  };
+
+  // ── Nachricht rendern ─────────────────────────
+  function renderMsg(msg) {
+    const wrap = document.createElement('div');
+    wrap.className = 'chat-msg ' + (msg.own ? 'chat-own' : 'chat-other');
+    wrap.dataset.id = msg.id;
+    const sender = msg.own ? '' :
+      `<div class="chat-sender">${msg.is_admin ? '<i class="bi bi-shield-fill text-warning me-1"></i>' : ''}${escHtml(msg.display_name)}</div>`;
+    const quote = msg.reply_to_id && msg.reply_text
+      ? `<div class="chat-quote">
+           <div class="reply-sender" style="${msg.own ? 'color:rgba(0,0,0,.85)' : 'color:#2d6e42'};font-weight:600">${escHtml(msg.reply_name||'?')}</div>
+           <div class="reply-text text-truncate" style="${msg.own ? 'color:rgba(0,0,0,.6)' : 'color:#444'}">${escHtml((msg.reply_text||'').substring(0,80))}${(msg.reply_text||'').length>80?'…':''}</div>
+         </div>` : '';
+    const del = IS_ADMIN ? `<button class="btn-del-msg" onclick="deleteMsg(${msg.id},this)"><i class="bi bi-x"></i></button>` : '';
+    const replyName = escHtml(msg.display_name||'');
+    const replyPrev = escHtml((msg.message||'').substring(0,60));
+    wrap.innerHTML = `<div class="chat-bubble">${sender}${quote}
+      <div class="chat-text">${escHtml(msg.message)}</div>
+      <div class="chat-meta d-flex align-items-center gap-2 mt-1">
+        <span class="chat-time">${msg.created_at.slice(11,16)} Uhr</span>
+        <button class="btn-reply text-muted" onclick="startReply(${msg.id},'${replyName}','${replyPrev}')"
+                style="background:none;border:none;padding:0;font-size:.75rem;cursor:pointer" title="Antworten">
+          <i class="bi bi-reply"></i>
+        </button>
+        <span class="reaction-group">
+          <button class="btn-react" data-mid="${msg.id}" data-emoji="👍" onclick="react(this)">👍 <span class="react-count" data-mid="${msg.id}" data-emoji="👍"></span></button>
+          <button class="btn-react" data-mid="${msg.id}" data-emoji="👎" onclick="react(this)">👎 <span class="react-count" data-mid="${msg.id}" data-emoji="👎"></span></button>
+        </span>
+        ${del}
+      </div>
+    </div>`;
+    document.getElementById('chat-end').before(wrap);
+  }
+
+  // ── Polling ───────────────────────────────────
+  async function poll() {
+    try {
+      const r    = await fetch(`/chat/messages?since=${lastId}`);
+      const msgs = await r.json();
+      if (msgs.length) {
+        msgs.forEach(m => { renderMsg(m); lastId = Math.max(lastId, m.id); });
+        scrollToBottom(false);
+      }
+      const ro     = await fetch('/chat/online');
+      const online = await ro.json();
+      document.getElementById('online-count').textContent = online.length;
+      const list = document.getElementById('online-list');
+      list.innerHTML = online.length
+        ? online.map(u => `<div class="list-group-item py-2 d-flex align-items-center gap-2"><i class="bi bi-circle-fill text-success" style="font-size:.5rem"></i><span class="small">${escHtml(u.name)}</span></div>`).join('')
+        : '<div class="list-group-item py-2 text-muted small">Niemand online</div>';
+    } catch(e) {}
+    loadPoll();
+  }
+  setInterval(poll, 5000);
+
+  // ── Senden ────────────────────────────────────
+  document.getElementById('chat-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const msg = chatInput.value.trim();
+    if (!msg) return;
+    const replyId = document.getElementById('reply-to-id').value;
+    chatInput.value = ''; updateCharCount(); cancelReply();
+    try {
+      const body = new URLSearchParams({message: msg});
+      if (replyId) body.append('reply_to_id', replyId);
+      await fetch('/chat', {method:'POST',
+        headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body: body.toString()});
+      await poll(); scrollToBottom(true);
+    } catch(e) {}
+  });
+
+  function updateCharCount() {
+    const len = chatInput.value.length;
+    const el  = document.getElementById('char-count');
+    el.textContent = len+'/500';
+    el.className   = len > 450 ? 'text-danger small' : 'text-muted small';
+  }
+  chatInput.addEventListener('input', updateCharCount);
+  chatInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      document.getElementById('chat-form').dispatchEvent(
+        new Event('submit', {bubbles: true, cancelable: true})
+      );
+    }
+  });
+
+  // Sofort laden (nicht erst nach 5 Sek warten)
+  poll();
+
+  // ── Löschen ───────────────────────────────────
+  window.deleteMsg = async function(id, btn) {
+    if (!confirm('Nachricht löschen?')) return;
+    await fetch(`/chat/${id}/delete`, {method:'POST'});
+    btn.closest('.chat-msg').remove();
+  };
+
+  // ── Reaktionen 👍/👎 ─────────────────────────
+  window.react = async function(btn) {
+    const mid   = btn.dataset.mid;
+    const emoji = btn.dataset.emoji;
+    const r     = await fetch('/chat/react', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({message_id: parseInt(mid), emoji})
+    });
+    const d = await r.json();
+    if (!d.ok) return;
+    // Alle Buttons dieser Nachricht aktualisieren
+    document.querySelectorAll(`.btn-react[data-mid="${mid}"]`).forEach(b => {
+      b.classList.toggle('active', b.dataset.emoji === d.my);
+    });
+    document.querySelectorAll(`.react-count[data-mid="${mid}"]`).forEach(span => {
+      const c = d.counts[span.dataset.emoji] || 0;
+      span.textContent = c > 0 ? c : '';
+    });
+  };
+
+  // ── Umfragen ─────────────────────────────────
+  let currentPollId = null;
+  let currentPollData = null;
+  let myVote        = null;
+
+  async function loadPoll() {
+    try {
+      const r    = await fetch('/chat/poll/current');
+      const data = await r.json();
+      renderPoll(data.poll);
+    } catch(e) {}
+  }
+
+  function renderPoll(poll) {
+    const sidebar = document.getElementById('poll-sidebar');
+    const body    = document.getElementById('poll-sidebar-body');
+    if (!poll) { sidebar.classList.add('d-none'); currentPollId = null; return; }
+    currentPollId   = poll.id;
+    currentPollData = poll;
+    myVote          = poll.my_vote;
+    sidebar.classList.remove('d-none');
+    const totalVotes = Object.values(poll.results).reduce((a,b)=>a+b, 0);
+
+    // Optionen mit Balken
+    let html = `<div class="fw-semibold mb-2">${escHtml(poll.question)}</div>`
+      + poll.options.map(opt => {
+          const votes  = poll.results[opt.id] || 0;
+          const pct    = totalVotes > 0 ? Math.round(votes/totalVotes*100) : 0;
+          const voted  = myVote == opt.id;
+          return `<button class="btn btn-sm w-100 mb-1 text-start ${voted ? 'btn-bundesliga' : 'btn-outline-secondary'}"
+                    onclick="votePoll(${opt.id})">
+                    <div class="d-flex justify-content-between align-items-center">
+                      <span>${voted ? '✓ ' : ''}${escHtml(opt.option)}</span>
+                      <span class="badge bg-light text-dark ms-2">${votes > 0 ? pct+'%' : ''}</span>
+                    </div>
+                    ${myVote ? `<div class="progress mt-1" style="height:4px"><div class="progress-bar bg-success" style="width:${pct}%"></div></div>` : ''}
+                  </button>`;
+        }).join('');
+
+    html += `<div class="text-muted small mt-1">${totalVotes} Stimme${totalVotes!==1?'n':''}`
+          + (myVote ? ` · <a href="#" onclick="votePoll(null);return false" class="text-muted small ms-1">Zurücksetzen</a>` : '')
+          + `</div>`;
+
+    // Admin: Wer hat wie abgestimmt
+    if (IS_ADMIN && poll.voter_details && poll.voter_details.length > 0) {
+      // Gruppieren nach Option
+      const byOption = {};
+      poll.voter_details.forEach(v => {
+        if (!byOption[v.option_id]) byOption[v.option_id] = {label: v.option, names: []};
+        byOption[v.option_id].names.push(v.name);
+      });
+      html += `<details class="mt-2">
+        <summary class="text-muted small" style="cursor:pointer">
+          <i class="bi bi-eye me-1"></i>Stimmen anzeigen (Admin)
+        </summary>
+        <div class="mt-1 border rounded p-2 bg-white small">`;
+      Object.values(byOption).forEach(grp => {
+        html += `<div class="mb-1"><span class="badge bg-secondary me-1">${escHtml(grp.label)}</span>`
+              + grp.names.map(n => `<span class="badge bg-light text-dark me-1">${escHtml(n)}</span>`).join('')
+              + `</div>`;
+      });
+      // Noch nicht abgestimmt
+      const votedCount = poll.voter_details.length;
+      html += `</div></details>`;
+    } else if (IS_ADMIN && totalVotes === 0) {
+      html += `<div class="text-muted small mt-1"><i class="bi bi-eye me-1"></i>Noch keine Stimmen</div>`;
+    }
+
+    html += IS_ADMIN
+      ? `<div class="d-flex gap-1 mt-2">`
+        + (poll.vote_count === 0
+            ? `<button class="btn btn-sm btn-outline-secondary flex-grow-1" onclick="editCurrentPoll()"><i class="bi bi-pencil me-1"></i>Bearbeiten</button>`
+            : `<button class="btn btn-sm btn-outline-secondary flex-grow-1" disabled title="Bereits abgestimmt — Bearbeitung gesperrt"><i class="bi bi-pencil-fill me-1"></i>Gesperrt</button>`)
+        + `<button class="btn btn-sm btn-outline-danger flex-grow-1" onclick="closePoll()">Beenden</button></div>`
+      : '';
+    body.innerHTML = html;
+  }
+
+  window.votePoll = async function(optionId) {
+    if (optionId === null) {
+      // Stimme zurücksetzen
+      const r = await fetch('/chat/poll/vote/reset', {method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({poll_id: currentPollId})});
+      const d = await r.json();
+      if (d.ok) { myVote = null; loadPoll(); }
+      return;
+    }
+    const r    = await fetch('/chat/poll/vote', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({option_id: optionId})
+    });
+    const data = await r.json();
+    if (data.ok) { myVote = optionId; loadPoll(); }
+  };
+
+  window.editCurrentPoll = function() {
+    if (!currentPollData) return;
+    const poll = currentPollData;
+    document.getElementById('pollQuestion').value = poll.question;
+    const container = document.getElementById('pollOptions');
+    container.innerHTML = '';
+    poll.options.forEach((opt, i) => {
+      const inp = document.createElement('input');
+      inp.type = 'text'; inp.className = 'form-control form-control-sm mb-1 poll-opt';
+      inp.placeholder = `Option ${i+1}`; inp.value = opt.option;
+      container.appendChild(inp);
+    });
+    document.getElementById('pollForm').dataset.editId = poll.id;
+    document.getElementById('pollForm').classList.remove('d-none');
+    document.getElementById('pollQuestion').focus();
+    document.getElementById('pollQuestion').scrollIntoView({behavior:'smooth'});
+  };
+
+  // createPoll anpassen: unterstützt auch Bearbeitung
+  window.createPoll = async function() {
+    const q    = document.getElementById('pollQuestion').value.trim();
+    const opts = [...document.querySelectorAll('.poll-opt')].map(i=>i.value.trim()).filter(Boolean);
+    if (!q || opts.length < 2) { alert('Frage und mind. 2 Optionen nötig.'); return; }
+    const editId = document.getElementById('pollForm').dataset.editId;
+    let url  = '/chat/poll/create';
+    let body = {question: q, options: opts};
+    if (editId) { url = '/chat/poll/edit'; body.poll_id = parseInt(editId); }
+    const r = await fetch(url, {method:'POST',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    const d = await r.json();
+    if (!d.ok) { alert(d.error || 'Fehler'); return; }
+    document.getElementById('pollForm').classList.add('d-none');
+    document.getElementById('pollForm').dataset.editId = '';
+    document.getElementById('pollQuestion').value = '';
+    document.querySelectorAll('.poll-opt').forEach(i => i.value='');
+    loadPoll();
+  };
+
+  window.closePoll = async function() {
+    if (!confirm('Umfrage beenden?')) return;
+    await fetch('/chat/poll/close', {method:'POST'});
+    loadPoll();
+  };
+
+  window.addPollOption = function() {
+    const n = document.querySelectorAll('.poll-opt').length + 1;
+    const i = document.createElement('input');
+    i.type = 'text'; i.className = 'form-control form-control-sm mb-1 poll-opt';
+    i.placeholder = `Option ${n}`;
+    document.getElementById('pollOptions').appendChild(i);
+  };
+
+  loadPoll();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% block title %}Platzierungsverlauf{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 no-print">
+  <h4 class="mb-0"><i class="bi bi-graph-up me-2 text-success"></i>Platzierungsverlauf</h4>
+  <div class="d-flex gap-2">
+    <div class="btn-group btn-group-sm no-print" role="group">
+      <button class="btn btn-outline-secondary active" id="btn-rank" onclick="tcShowChart('rank')">Platzierung</button>
+      <button class="btn btn-outline-secondary" id="btn-score" onclick="tcShowChart('score')">Score</button>
+    </div>
+    <button class="btn btn-sm btn-outline-secondary no-print" id="btn-toggle-all"
+            onclick="tcToggleAll()" title="Alle ein-/ausblenden">
+      <i class="bi bi-eye me-1"></i>Alle einblenden
+    </button>
+    <button class="btn btn-sm btn-print no-print" onclick="window.print()">
+      <i class="bi bi-printer me-1"></i>Drucken
+    </button>
+  </div>
+</div>
+<div class="print-header d-none">
+  <h3>⚽ Tippcup Bundesliga – Platzierungsverlauf {{ season.name if season }}</h3>
+</div>
+
+{% if not users_data or not labels %}
+<div class="card shadow-sm">
+  <div class="card-body text-center p-5 text-muted">
+    <i class="bi bi-graph-up fs-1"></i>
+    <h5 class="mt-3">Noch keine Verlaufsdaten</h5>
+    <p>Der Verlauf wird nach dem ersten Tabellenupdate aufgebaut.<br>
+    Jedes Mal wenn die Tabelle aktualisiert wird, wird ein Snapshot gespeichert.</p>
+    <a href="{{ url_for('leaderboard') }}" class="btn btn-bundesliga mt-2">
+      <i class="bi bi-trophy me-1"></i>Zur Bestenliste
+    </a>
+  </div>
+</div>
+{% else %}
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-bundesliga text-white d-flex justify-content-between align-items-center">
+    <span id="chart-title"><i class="bi bi-graph-up me-2"></i>Platzierungsverlauf</span>
+    <span class="badge bg-light text-dark">{{ labels|length }} Datenpunkte · {{ users_data|length }} Tipper</span>
+  </div>
+  <div class="card-body p-2">
+    <div id="chart-container" style="position:relative; height:420px">
+      <canvas id="rankChart"></canvas>
+    </div>
+  </div>
+  <div class="card-footer py-2 text-muted small">
+    <i class="bi bi-info-circle me-1"></i>
+    Platzierungsansicht: Platz 1 oben. Score-Ansicht: höher = besser.
+    Auf Spielernamen klicken um ein-/auszublenden.
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-table me-2"></i>Verlaufstabelle</span>
+    <span class="text-muted small">Platz | Score je Zeitpunkt</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive" style="max-height:480px;overflow:auto">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead class="table-dark" style="position:sticky;top:0;z-index:3">
+          <tr>
+            <th style="min-width:140px;position:sticky;left:0;z-index:4;background:#212529;white-space:nowrap">Spieler</th>
+            {% for label in labels %}
+            <th class="text-center" style="min-width:80px;white-space:nowrap">
+              <span class="small">{{ label }}</span>
+            </th>
+            {% endfor %}
+            <th class="text-center fw-bold" style="min-width:80px;white-space:nowrap">Aktuell</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for uid, data in users_data.items() %}
+          {% set cur = current|selectattr('user_id','equalto',uid|int)|first %}
+          <tr>
+            <td class="fw-semibold verlauf-sticky-col" style="position:sticky;left:0;z-index:2;background:var(--bs-body-bg,#fff);border-right:2px solid #dee2e6;white-space:nowrap">
+              <span class="user-color-dot" data-uid="{{ uid }}">●</span>
+              {{ data.name }}
+            </td>
+            {% for i in range(labels|length) %}
+            {% set rank = data.ranks[i] if i < data.ranks|length else '–' %}
+            {% set score = data.scores[i] if i < data.scores|length else '–' %}
+            <td class="text-center small">
+              {% if rank != '–' %}
+              <span class="badge {% if rank == 1 %}bg-warning text-dark{% elif rank <= 3 %}bg-success{% elif rank > total_players - 3 %}bg-danger{% else %}bg-secondary{% endif %}">
+                {{ rank }}.
+              </span>
+              <div class="text-muted" style="font-size:.65rem">{{ score }} Pkt</div>
+              {% else %}–{% endif %}
+            </td>
+            {% endfor %}
+            <td class="text-center fw-bold">
+              {% if cur %}
+              <span class="badge {% if loop.index == 1 %}bg-warning text-dark{% elif loop.index <= 3 %}bg-success{% else %}bg-secondary{% endif %} fs-6">
+                {% for c in current %}{% if c.user_id == uid|int %}{{ loop.index }}.{% endif %}{% endfor %}
+              </span>
+              <div class="small text-success fw-bold">{{ cur.score }}</div>
+              {% else %}–{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{% if users_data and labels %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// ── Verlauf Chart ─────────────────────────────────────────────
+var TC_PALETTE = [
+  '#1a5e2a','#d4001a','#0066cc','#f5a623','#9b59b6',
+  '#00aaaa','#e67e22','#2ecc71','#e91e63','#607d8b',
+  '#795548','#ff5722','#3f51b5','#009688','#ff9800',
+  '#8bc34a','#673ab7','#f44336','#00bcd4','#cddc39'
+];
+
+var tcLabels      = {{ labels|tojson }};
+var tcTotalPlayer = {{ total_players }};
+var tcChart       = null;
+var tcMode        = 'rank';
+var tcAlleAn      = false;
+
+// Alle Datasets
+var tcAllRank  = [];
+var tcAllScore = [];
+{% for uid, data in users_data.items() %}
+(function(){
+  var color = TC_PALETTE[{{ loop.index0 }} % TC_PALETTE.length];
+  {% if uid|int == my_uid %}var bw = 3.5; var pr = 5;{% else %}var bw = 2.5; var pr = 4;{% endif %}
+  var base = { label: {{ data.name|tojson }}, borderColor: color, backgroundColor: color+'22',
+               borderWidth: bw, pointRadius: pr, pointHoverRadius:7, tension:0.3, fill:false };
+  tcAllRank.push(Object.assign({}, base, { data: {{ data.ranks|tojson }} }));
+  tcAllScore.push(Object.assign({}, base, { data: {{ data.scores|tojson }} }));
+})();
+{% endfor %}
+
+// Eigene Datasets (server-seitig gefiltert)
+var tcOwnRank  = [{% for uid, data in users_data.items() %}{% if uid|int == my_uid %}tcAllRank[{{ loop.index0 }}],{% endif %}{% endfor %}];
+var tcOwnScore = [{% for uid, data in users_data.items() %}{% if uid|int == my_uid %}tcAllScore[{{ loop.index0 }}],{% endif %}{% endfor %}];
+if (!tcOwnRank.length)  tcOwnRank  = tcAllRank;
+if (!tcOwnScore.length) tcOwnScore = tcAllScore;
+
+// Sticky Dark Mode
+function tcApplyDark() {
+  var dark = document.documentElement.dataset.theme === 'dark';
+  document.querySelectorAll('.verlauf-sticky-col').forEach(function(el) {
+    el.style.background = dark ? '#1a1a2e' : '';
+    el.style.borderRightColor = dark ? '#444' : '#dee2e6';
+  });
+}
+tcApplyDark();
+new MutationObserver(tcApplyDark).observe(document.documentElement, {attributes:true, attributeFilter:['data-theme']});
+document.querySelectorAll('.user-color-dot').forEach(function(el, i) {
+  el.style.color = TC_PALETTE[i % TC_PALETTE.length];
+});
+
+// Chart erstellen — alle Datasets, eigene sichtbar, andere durchgestrichen
+var tcCtx = document.getElementById('rankChart').getContext('2d');
+tcChart = new Chart(tcCtx, {
+  type: 'line',
+  data: { labels: tcLabels, datasets: tcAllRank },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { position: 'bottom', labels: { padding:16, usePointStyle:true, pointStyleWidth:10 } },
+      tooltip: { callbacks: { label: function(c) { return ' '+c.dataset.label+': Platz '+c.parsed.y; } } }
+    },
+    scales: {
+      y: { reverse:true, min:1, max:tcTotalPlayer,
+           ticks:{ stepSize:1, callback:function(v){ return 'Platz '+v; } },
+           title:{ display:true, text:'Platzierung' } },
+      x: { ticks:{ maxRotation:45, minRotation:30 } }
+    }
+  }
+});
+
+// Andere Spieler ausblenden — eigene sichtbar, in Legende aber alle anklickbar
+tcAllRank.forEach(function(ds, i) {
+  var isOwn = tcOwnRank.indexOf(ds) >= 0;
+  tcChart.setDatasetVisibility(i, isOwn);
+});
+tcChart.update();
+
+// Resize / Landscape
+window.addEventListener('resize', function(){ if(tcChart) tcChart.resize(); });
+(function(){
+  var mq = window.matchMedia('(orientation: landscape)');
+  function adapt(){
+    var c = document.getElementById('chart-container');
+    if(!c||!tcChart) return;
+    c.style.height = (mq.matches ? 250 : 420)+'px';
+    requestAnimationFrame(function(){ tcChart.resize(); });
+  }
+  mq.addEventListener('change', adapt);
+  if(window.visualViewport) window.visualViewport.addEventListener('resize', adapt);
+  if(screen.orientation) screen.orientation.addEventListener('change', function(){ setTimeout(adapt,100); });
+  adapt();
+})();
+
+// Toggle: alle einblenden / zurück auf nur eigene
+function tcToggleAll() {
+  tcAlleAn = !tcAlleAn;
+  tcAllRank.forEach(function(ds, i) {
+    var isOwn = tcOwnRank.indexOf(ds) >= 0;
+    tcChart.setDatasetVisibility(i, tcAlleAn || isOwn);
+  });
+  tcChart.update();
+  var btn = document.getElementById('btn-toggle-all');
+  if(btn) btn.innerHTML = tcAlleAn
+    ? '<i class="bi bi-eye-slash me-1"></i>Andere ausblenden'
+    : '<i class="bi bi-eye me-1"></i>Alle einblenden';
+}
+
+// Modus wechseln
+function tcShowChart(mode) {
+  if(mode === tcMode) return;
+  tcMode = mode;
+  var isRank = mode === 'rank';
+  var newAll  = isRank ? tcAllRank  : tcAllScore;
+  var newOwn  = isRank ? tcOwnRank  : tcOwnScore;
+  tcChart.data.datasets = newAll;
+  // Sichtbarkeit neu anwenden
+  newAll.forEach(function(ds, i) {
+    var isOwn = newOwn.indexOf(ds) >= 0;
+    tcChart.setDatasetVisibility(i, tcAlleAn || isOwn);
+  });
+  tcChart.options.scales.y.reverse    = isRank;
+  tcChart.options.scales.y.min        = isRank ? 1 : 0;
+  tcChart.options.scales.y.max        = isRank ? tcTotalPlayer : undefined;
+  tcChart.options.scales.y.title.text = isRank ? 'Platzierung' : 'Score (Punkte)';
+  tcChart.options.plugins.tooltip.callbacks.label = isRank
+    ? function(c){ return ' '+c.dataset.label+': Platz '+c.parsed.y; }
+    : function(c){ return ' '+c.dataset.label+': '+c.parsed.y+' Pkt.'; };
+  tcChart.options.scales.y.ticks.callback = isRank
+    ? function(v){ return 'Platz '+v; }
+    : function(v){ return v+' Pkt.'; };
+  document.getElementById('chart-title').innerHTML =
+    '<i class="bi bi-graph-up me-2"></i>'+(isRank?'Platzierungsverlauf':'Score-Verlauf');
+  document.getElementById('btn-rank').classList.toggle('active', isRank);
+  document.getElementById('btn-score').classList.toggle('active', !isRank);
+  tcChart.update();
+}
+</script>
+{% endif %}
+{% endblock %}

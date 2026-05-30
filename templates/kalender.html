@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Spieltag-Kalender{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="mb-0"><i class="bi bi-calendar3 me-2"></i>Spieltag-Kalender</h4>
+  {% if season %}<span class="badge bg-bundesliga fs-6">{{ season.name }}</span>{% endif %}
+</div>
+
+{% if not season %}
+<div class="alert alert-info">Keine aktive Saison.</div>
+{% else %}
+
+<!-- Deadline-Info -->
+{% if deadline_bl1 or deadline_bl2 %}
+<div class="row g-2 mb-3">
+  {% for lg, dl in [('1. Bundesliga', deadline_bl1), ('2. Bundesliga', deadline_bl2)] %}
+  {% if dl %}
+  <div class="col-12 col-sm-6">
+    <div class="alert alert-warning py-2 mb-0">
+      <i class="bi bi-clock-fill me-1"></i>
+      <strong>{{ lg }}</strong> Tippschluss: {{ dl[8:10] }}.{{ dl[5:7] }}.{{ dl[:4] }} {{ dl[11:16] }} Uhr
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Kalender-Grid -->
+<div class="card shadow-sm">
+  <div class="card-header bg-dark text-white">
+    <i class="bi bi-grid-3x3-gap me-2"></i>Alle 34 Spieltage
+    <small class="ms-3 opacity-75">
+      <span class="badge bg-success me-1">●</span>abgeschlossen
+      <span class="badge bg-warning text-dark me-1 ms-2">●</span>aktuell
+      <span class="badge bg-secondary ms-2">●</span>ausstehend
+    </small>
+  </div>
+  <div class="card-body p-3">
+    <div class="row g-2">
+      {% for md in matchdays %}
+      <div class="col-3 col-sm-2 col-md-2 col-lg-1">
+        {% if md.status == 'done' %}
+        <div class="text-center p-2 rounded bg-success bg-opacity-15 border border-success"
+             title="Spieltag {{ md.nr }} – abgeschlossen">
+          <div class="fw-bold text-success">{{ md.nr }}</div>
+          <div style="font-size:.65rem" class="text-success">✓</div>
+        </div>
+        {% elif md.status == 'current' %}
+        <div class="text-center p-2 rounded bg-warning bg-opacity-25 border border-warning border-2"
+             title="Spieltag {{ md.nr }} – aktuell">
+          <div class="fw-bold text-warning">{{ md.nr }}</div>
+          <div style="font-size:.65rem">▶</div>
+        </div>
+        {% else %}
+        <div class="text-center p-2 rounded bg-light border border-secondary border-opacity-25"
+             title="Spieltag {{ md.nr }} – ausstehend" style="opacity:.6">
+          <div class="fw-semibold text-muted">{{ md.nr }}</div>
+          <div style="font-size:.65rem" class="text-muted">–</div>
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Fortschrittsbalken -->
+    {% set done_count = matchdays | selectattr('status','equalto','done') | list | length %}
+    {% set total = matchdays | length %}
+    <div class="mt-3">
+      <div class="d-flex justify-content-between small text-muted mb-1">
+        <span>{{ done_count }} von {{ total }} Spieltagen abgeschlossen</span>
+        <span>{{ (done_count / total * 100)|int }}%</span>
+      </div>
+      <div class="progress" style="height:8px">
+        <div class="progress-bar bg-success"
+             style="width:{{ (done_count / total * 100)|int }}%"></div>
+        {% if matchdays | selectattr('status','equalto','current') | list %}
+        <div class="progress-bar bg-warning" style="width:3%"></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick Links -->
+<div class="row g-3 mt-2">
+  {% if not season.tips_locked %}
+  <div class="col-12 col-sm-4">
+    <a href="{{ url_for('predict') }}" class="card shadow-sm text-decoration-none text-dark h-100">
+      <div class="card-body text-center py-3">
+        <i class="bi bi-pencil-square fs-2 text-bundesliga"></i>
+        <div class="fw-semibold mt-1">Tipp abgeben</div>
+      </div>
+    </a>
+  </div>
+  {% endif %}
+  <div class="col-12 col-sm-4">
+    <a href="{{ url_for('leaderboard') }}" class="card shadow-sm text-decoration-none text-dark h-100">
+      <div class="card-body text-center py-3">
+        <i class="bi bi-trophy fs-2 text-warning"></i>
+        <div class="fw-semibold mt-1">Bestenliste</div>
+      </div>
+    </a>
+  </div>
+  <div class="col-12 col-sm-4">
+    <a href="{{ url_for('highlights') }}" class="card shadow-sm text-decoration-none text-dark h-100">
+      <div class="card-body text-center py-3">
+        <i class="bi bi-star fs-2 text-warning"></i>
+        <div class="fw-semibold mt-1">Highlights</div>
+      </div>
+    </a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

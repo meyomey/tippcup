@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}Team-Statistik{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 no-print">
+  <h4 class="mb-0"><i class="bi bi-bar-chart-line-fill me-2"></i>Team-Statistik</h4>
+  <div class="d-flex gap-2 align-items-center">
+    {% if season %}<span class="badge bg-bundesliga fs-6">{{ season.name }}</span>{% endif %}
+    <button class="btn btn-sm btn-print" onclick="window.print()">
+      <i class="bi bi-printer me-1"></i>Drucken
+    </button>
+  </div>
+</div>
+
+<!-- Highlights oben -->
+<div class="row g-3 mb-4">
+  <!-- Umstrittenste Teams -->
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-danger text-white">
+        <i class="bi bi-lightning-fill me-2"></i>Umstrittenste Teams
+        <small class="ms-2 opacity-75">– größte Meinungsverschiedenheit</small>
+      </div>
+      <div class="card-body p-0">
+        <div class="list-group list-group-flush">
+          {% for t in contested %}
+          <div class="list-group-item d-flex align-items-center gap-3 py-2">
+            {% if t.logo_url %}
+            <img src="{{ t.logo_url }}" style="width:28px;height:28px;object-fit:contain">
+            {% endif %}
+            <div class="flex-grow-1">
+              <div class="fw-semibold">{{ t.name }}
+                <span class="badge bg-secondary ms-1 small">{{ leagues.get(t.league,'') }}</span>
+              </div>
+              <div class="small text-muted">
+                Tipps reichten von Platz <strong>{{ t.min_tip|int if t.min_tip else '?' }}</strong>
+                bis <strong>{{ t.max_tip|int if t.max_tip else '?' }}</strong>
+                · Ø {{ '%.1f'|format(t.avg_tip or 0) }}
+              </div>
+            </div>
+            <div class="text-end">
+              <span class="badge bg-danger fs-6">±{{ t.spread }}</span>
+              <div class="text-muted" style="font-size:.65rem">Streuung</div>
+            </div>
+          </div>
+          {% else %}
+          <div class="list-group-item text-muted py-3 text-center">Noch keine Daten</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Konsensus-Teams -->
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-success text-white">
+        <i class="bi bi-check-circle-fill me-2"></i>Einigste Teams
+        <small class="ms-2 opacity-75">– alle tippen ähnlich</small>
+      </div>
+      <div class="card-body p-0">
+        <div class="list-group list-group-flush">
+          {% for t in consensus %}
+          <div class="list-group-item d-flex align-items-center gap-3 py-2">
+            {% if t.logo_url %}
+            <img src="{{ t.logo_url }}" style="width:28px;height:28px;object-fit:contain">
+            {% endif %}
+            <div class="flex-grow-1">
+              <div class="fw-semibold">{{ t.name }}
+                <span class="badge bg-secondary ms-1 small">{{ leagues.get(t.league,'') }}</span>
+              </div>
+              <div class="small text-muted">
+                Alle tippen ca. Platz <strong>{{ '%.1f'|format(t.avg_tip or 0) }}</strong>
+                · Streuung nur {{ t.spread }} Plätze
+              </div>
+            </div>
+            <div class="text-end">
+              <span class="badge bg-success fs-6">±{{ t.spread }}</span>
+              <div class="text-muted" style="font-size:.65rem">Streuung</div>
+            </div>
+          </div>
+          {% else %}
+          <div class="list-group-item text-muted py-3 text-center">Noch keine Daten</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Detailtabellen pro Liga -->
+{% for lg_key, lg_name in leagues.items() %}
+{% set stats = stats_bl1 if lg_key == 'bl1' else stats_bl2 %}
+{% if stats %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header {% if lg_key=='bl1' %}bg-dark{% else %}bg-secondary{% endif %} text-white d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-shield-fill me-2"></i>{{ lg_name }}</span>
+    <span class="badge bg-light text-dark">{{ n_users }} Tipper</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead class="table-dark">
+          <tr>
+            <th class="text-center" style="width:40px">Ist</th>
+            <th>Team</th>
+            <th class="text-center" style="width:55px">
+              Ø Tipp
+              <div class="text-white-50" style="font-size:.65rem">Schnitt</div>
+            </th>
+            <th class="text-center d-none d-sm-table-cell">
+              Min–Max
+              <div class="text-white-50" style="font-size:.65rem">Spannweite</div>
+            </th>
+            <th class="text-center d-none d-md-table-cell">
+              🥇 Platz 1
+              <div class="text-white-50" style="font-size:.65rem">Tipper</div>
+            </th>
+            <th class="text-center d-none d-md-table-cell">
+              🏅 Top 3
+              <div class="text-white-50" style="font-size:.65rem">Tipper</div>
+            </th>
+            <th class="text-center d-none d-lg-table-cell">
+              ⬇ Abstieg
+              <div class="text-white-50" style="font-size:.65rem">Tipper</div>
+            </th>
+            <th class="text-center">
+              🎯 Treffer
+              <div class="text-white-50" style="font-size:.65rem">exakt</div>
+            </th>
+            <th class="text-center d-none d-sm-table-cell">
+              Streuung
+              <div class="text-white-50" style="font-size:.65rem">±</div>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in stats %}
+          {% set spread = (t.max_tip - t.min_tip)|int if t.max_tip and t.min_tip else 0 %}
+          <tr>
+            <td class="text-center fw-bold text-muted">{{ t.actual_rank or '–' }}</td>
+            <td>
+              <div class="d-flex align-items-center gap-2">
+                {% if t.logo_url %}
+                <img src="{{ t.logo_url }}" style="width:20px;height:20px;object-fit:contain">
+                {% endif %}
+                <span class="fw-semibold">{{ t.name }}</span>
+              </div>
+            </td>
+            <td class="text-center">
+              {% if t.avg_tip %}
+              <span class="badge {% if t.actual_rank and (t.avg_tip - t.actual_rank)|abs <= 2 %}bg-success{% elif t.actual_rank and (t.avg_tip - t.actual_rank)|abs <= 5 %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                {{ '%.1f'|format(t.avg_tip) }}
+              </span>
+              {% else %}–{% endif %}
+            </td>
+            <td class="text-center text-muted small d-none d-sm-table-cell">
+              {% if t.min_tip and t.max_tip %}
+              {{ t.min_tip|int }}–{{ t.max_tip|int }}
+              {% else %}–{% endif %}
+            </td>
+            <td class="text-center d-none d-md-table-cell">
+              {% if t.tips_rank1 %}
+              <span class="badge bg-warning text-dark">{{ t.tips_rank1 }}×</span>
+              {% else %}<span class="text-muted">–</span>{% endif %}
+            </td>
+            <td class="text-center d-none d-md-table-cell">
+              {% if t.tips_top3 %}
+              <span class="badge bg-secondary">{{ t.tips_top3 }}×</span>
+              {% else %}<span class="text-muted">–</span>{% endif %}
+            </td>
+            <td class="text-center d-none d-lg-table-cell">
+              {% if t.tips_absteiger %}
+              <span class="badge bg-danger">{{ t.tips_absteiger }}×</span>
+              {% else %}<span class="text-muted">–</span>{% endif %}
+            </td>
+            <td class="text-center">
+              {% if t.volltreffer %}
+              <span class="badge bg-success">🎯 {{ t.volltreffer }}×</span>
+              {% else %}<span class="text-muted">–</span>{% endif %}
+            </td>
+            <td class="text-center d-none d-sm-table-cell">
+              <span class="badge {% if spread <= 2 %}bg-success{% elif spread <= 6 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                ±{{ spread }}
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card-footer py-1 text-muted small">
+    <i class="bi bi-info-circle me-1"></i>
+    Ø Tipp: grün = Schnitt ≤2 Plätze vom Ist entfernt · gelb ≤5 · grau weiter weg.
+    Streuung: grün = alle einig (≤2) · rot = große Meinungsverschiedenheit (>6).
+  </div>
+</div>
+{% endif %}
+{% endfor %}
+
+{% endblock %}

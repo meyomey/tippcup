@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}Angsthasenbilanz{% endblock %}
+
+{% from '_macros.html' import player_tooltip %}
+{% block content %}
+<div class="d-flex justify-content-end mb-2 no-print"><button class="btn btn-sm btn-print" onclick="window.print()"><i class="bi bi-printer me-1"></i>PDF / Drucken</button></div><div class="print-header d-none"><h3>⚽ Tippcup Bundesliga – Angsthasenbilanz</h3></div><div class="row">
+  <div class="col-12 col-lg-9 mx-auto">
+
+    <div class="card shadow-sm">
+      <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span class="fw-bold"><i class="bi bi-emoji-dizzy me-2"></i>Angsthasenbilanz</span>
+        {% if season %}
+        <span class="badge bg-dark">{{ season.name }}</span>
+        {% endif %}
+      </div>
+
+      <div class="card-body pb-0">
+        <div class="alert alert-warning py-2 mb-3">
+          <i class="bi bi-info-circle me-2"></i>
+          Wie mutig bist du? Hier siehst du, wie stark dein Tipp von der
+          <strong>Abschlusstabelle {{ prev_year }}/{{ prev_year + 1 }}</strong> abweicht.
+          Wer am wenigsten Mut zeigt und einfach das Vorjahr tippt, steht ganz oben. 🐇
+        </div>
+      </div>
+
+      <div class="card-body p-0">
+        {% if not has_prev %}
+        <div class="text-center p-5">
+          <div style="font-size:4rem">🐇</div>
+          <h5 class="mt-3">Vorjahresdaten nicht verfügbar</h5>
+          <p class="text-muted">
+            Die Abschlusstabelle {{ prev_year }}/{{ prev_year + 1 }} konnte nicht geladen werden.<br>
+            Mögliche Ursachen:
+          </p>
+          <ul class="list-unstyled text-muted">
+            <li><i class="bi bi-dot"></i>Die Verbindung zur Daten-API ist unterbrochen</li>
+            <li><i class="bi bi-dot"></i>Die Saison {{ prev_year }} existiert noch nicht in der Datenbank</li>
+          </ul>
+          <a href="{{ url_for('leaderboard') }}" class="btn btn-outline-secondary mt-2">
+            <i class="bi bi-arrow-left me-1"></i>Zurück zur Bestenliste
+          </a>
+        </div>
+
+        {% elif not results %}
+        <div class="text-center p-5 text-muted">
+          <div style="font-size:4rem">🐇</div>
+          <h5 class="mt-3">Noch keine Tipps abgegeben</h5>
+          <p>Sobald Spieler ihre Tipps abgegeben haben, erscheint hier die Angsthasenbilanz.</p>
+        </div>
+
+        {% else %}
+        <div class="table-responsive">
+          <table class="table table-hover mb-0 align-middle">
+            <thead class="table-warning">
+              <tr>
+                <th class="text-center" style="width:55px">Platz</th>
+                <th>Spieler</th>
+                <th class="text-center d-none d-sm-table-cell">
+                  BL1-Abw.
+                  <small class="d-block text-muted" style="font-size:.7rem">von Vorjahr</small>
+                </th>
+                <th class="text-center d-none d-sm-table-cell">
+                  BL2-Abw.
+                  <small class="d-block text-muted" style="font-size:.7rem">von Vorjahr</small>
+                </th>
+                <th class="text-center">
+                  Abw(gew)
+                  <small class="d-block text-muted" style="font-size:.7rem">Abw/(n·k)</small>
+                </th>
+                <th class="text-center d-none d-md-table-cell" style="width:120px">Mutigkeitsskala</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% set max_w = results[-1].w_total if results else 1 %}
+              {% for r in results %}
+              {% set pct = (r.w_total / max_w * 100)|int if max_w > 0 else 0 %}
+              <tr class="{% if r.user_id == session.get('user_id') %}fw-bold table-info{% endif %}">
+                <td class="text-center">
+                  {% if loop.index == 1 %}
+                    <span title="Größter Angsthase 🐇" style="font-size:1.4rem">🐇</span>
+                  {% elif loop.index == loop.length %}
+                    <span title="Mutigster Tipper 🦁" style="font-size:1.4rem">🦁</span>
+                  {% else %}
+                    <span class="fw-bold text-muted">{{ loop.index }}</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {{ player_tooltip(r.display_name, r.full_name|default(''), r.favorite_club|default(''), r.username|default('')) }}
+                  {% if r.user_id == session.get('user_id') %}
+                    <span class="badge bg-primary ms-1">Ich</span>
+                  {% endif %}
+                </td>
+                <td class="text-center d-none d-sm-table-cell">
+                  <span class="badge bg-secondary" title="Gesamt: {{ r.dev_bl1 }} · k={{ r.k_bl1 }} · n={{ r.n_bl1 }}">
+                    {{ r.dev_bl1 }}
+                  </span>
+                </td>
+                <td class="text-center d-none d-sm-table-cell">
+                  <span class="badge bg-secondary" title="Gesamt: {{ r.dev_bl2 }} · k={{ r.k_bl2 }} · n={{ r.n_bl2 }}">
+                    {{ r.dev_bl2 }}
+                  </span>
+                </td>
+                <td class="text-center fw-bold fs-5">
+                  {{ '%.4f'|format(r.w_total) }}
+                  <small class="d-block text-muted fw-normal" style="font-size:.68rem">
+                    Gesamt: {{ r.total }}
+                  </small>
+                </td>
+                <td class="d-none d-md-table-cell">
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="progress flex-grow-1" style="height:10px">
+                      <div class="progress-bar
+                        {% if pct < 25 %}bg-success
+                        {% elif pct < 60 %}bg-warning
+                        {% else %}bg-danger{% endif %}"
+                        style="width:{{ pct }}%"></div>
+                    </div>
+                    <small class="text-muted" style="min-width:35px">
+                      {% if pct < 25 %}😴{% elif pct < 60 %}😐{% else %}😱{% endif %}
+                    </small>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="p-3 border-top">
+          <div class="row g-2 text-center">
+            <div class="col-6 col-md-3">
+              <div class="border rounded p-2">
+                <div style="font-size:1.5rem">🐇</div>
+                <div class="small fw-bold">{{ player_tooltip(results[0].display_name, results[0].full_name|default(''), results[0].favorite_club|default(''), results[0].username|default('')) }}</div>
+                <div class="small text-muted">Größter Angsthase</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="border rounded p-2">
+                <div style="font-size:1.5rem">🦁</div>
+                <div class="small fw-bold">{{ player_tooltip(results[-1].display_name, results[-1].full_name|default(''), results[-1].favorite_club|default(''), results[-1].username|default('')) }}</div>
+                <div class="small text-muted">Mutigster Tipper</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="border rounded p-2">
+                <div class="fw-bold fs-5 text-success">{{ '%.4f'|format(results[0].w_total) }}</div>
+                <div class="small text-muted">Niedrigste Abw(gew)</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="border rounded p-2">
+                <div class="fw-bold fs-5 text-danger">{{ '%.4f'|format(results[-1].w_total) }}</div>
+                <div class="small text-muted">Höchste Abw(gew)</div>
+              </div>
+            </div>
+          </div>
+          {% if results %}
+          <div class="mt-2 text-muted text-center small">
+            Verbleibende Teams (nicht auf-/abgestiegen):
+            BL1 k={{ results[0].k_bl1 }}/n={{ results[0].n_bl1 }} ·
+            BL2 k={{ results[0].k_bl2 }}/n={{ results[0].n_bl2 }}
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Erklärung -->
+    <div class="card shadow-sm mt-3">
+      <div class="card-header"><i class="bi bi-question-circle me-2"></i>Was bedeutet die Angsthasenbilanz?</div>
+      <div class="card-body">
+        <p class="mb-2">
+          Verglichen werden deine Tipps für <strong>{{ season.name if season }}</strong>
+          mit der tatsächlichen Abschlusstabelle der Saison <strong>{{ prev_year }}/{{ prev_year + 1 }}</strong>.
+          Auf- und Absteiger werden dabei <strong>ausgeschlossen</strong> — nur Teams die in beiden Saisons
+          in derselben Liga spielten zählen.
+        </p>
+        <p class="mb-2">
+          Die Formel lautet: <code>Abw(gew) = Abw(ges) / (n · k)</code><br>
+          <span class="text-muted small">
+            n = alle Teams der Liga · k = verbleibende Teams (ohne Auf-/Absteiger)
+          </span>
+        </p>
+        <p class="mb-2">
+          Ein <strong>kleiner Wert</strong> bedeutet: Du hast fast genauso getippt wie das Vorjahr endete —
+          typisches Angsthasen-Verhalten 🐇
+        </p>
+        <p class="mb-0">
+          Ein <strong>großer Wert</strong> bedeutet: Du hast mutig andere Platzierungen vorhergesagt —
+          ob das belohnt wird, zeigt die Bestenliste 🦁
+        </p>
+      </div>
+    </div>
+
+    <div class="mt-3 text-center">
+      <a href="{{ url_for('leaderboard') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Zurück zur Bestenliste
+      </a>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

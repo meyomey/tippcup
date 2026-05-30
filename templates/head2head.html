@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Head-to-Head Vergleich{% endblock %}
+{% block content %}
+<h4 class="mb-3"><i class="bi bi-people-fill me-2"></i>Head-to-Head Vergleich</h4>
+
+<!-- Auswahl -->
+<div class="card shadow-sm mb-4">
+  <div class="card-body">
+    <form method="GET" class="row g-2 align-items-end">
+      <div class="col-12 col-sm-5">
+        <label class="form-label small fw-semibold">Spieler 1</label>
+        <select name="uid1" class="form-select" required>
+          <option value="">– wählen –</option>
+          {% for u in users %}
+          <option value="{{ u.id }}" {% if u.id == uid1 %}selected{% endif %}>{{ u.display_name or u.username }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-sm-1 text-center"><span class="fw-bold fs-4 text-muted">vs</span></div>
+      <div class="col-12 col-sm-5">
+        <label class="form-label small fw-semibold">Spieler 2</label>
+        <select name="uid2" class="form-select" required>
+          <option value="">– wählen –</option>
+          {% for u in users %}
+          <option value="{{ u.id }}" {% if u.id == uid2 %}selected{% endif %}>{{ u.display_name or u.username }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-sm-1">
+        <button class="btn btn-bundesliga w-100"><i class="bi bi-search"></i></button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if data %}
+{% set u1 = data.u1 %} {% set u2 = data.u2 %}
+{% set sc1 = data.sc1 %} {% set sc2 = data.sc2 %}
+
+<!-- Score-Vergleich -->
+<div class="card shadow-sm mb-4">
+  <div class="card-body p-3">
+    <div class="row text-center g-0">
+      <div class="col-5">
+        <div class="profile-avatar mx-auto mb-2" style="background:#1a5e2a">{{ (u1.display_name or u1.username)[0].upper() }}</div>
+        <div class="fw-bold fs-5">{{ u1.display_name or u1.username }}</div>
+        {% if sc1 %}<div class="display-4 fw-bold text-success">{{ sc1.score }}</div>{% else %}<div class="text-muted">–</div>{% endif %}
+        <div class="badge {% if sc1 and sc2 and sc1.score > sc2.score %}bg-success{% else %}bg-secondary{% endif %} fs-6">
+          {% if sc1 and sc2 %}{% if sc1.score > sc2.score %}🏆 Führt{% elif sc1.score < sc2.score %}Zurück{% else %}Gleichstand{% endif %}{% endif %}
+        </div>
+      </div>
+      <div class="col-2 d-flex flex-column justify-content-center">
+        <div class="text-muted small">Score</div>
+        <div class="fw-bold fs-3 text-muted">:</div>
+        {% if sc1 and sc2 %}
+        <div class="text-muted small mt-2">Siege</div>
+        <div class="fw-bold text-muted">{{ data.wins1 }}:{{ data.wins2 }}</div>
+        <div class="text-muted small">Unentsch.</div>
+        <div class="text-muted">{{ data.draws }}</div>
+        {% endif %}
+      </div>
+      <div class="col-5">
+        <div class="profile-avatar mx-auto mb-2" style="background:#d4001a">{{ (u2.display_name or u2.username)[0].upper() }}</div>
+        <div class="fw-bold fs-5">{{ u2.display_name or u2.username }}</div>
+        {% if sc2 %}<div class="display-4 fw-bold text-danger">{{ sc2.score }}</div>{% else %}<div class="text-muted">–</div>{% endif %}
+        <div class="badge {% if sc1 and sc2 and sc2.score > sc1.score %}bg-danger{% else %}bg-secondary{% endif %} fs-6">
+          {% if sc1 and sc2 %}{% if sc2.score > sc1.score %}🏆 Führt{% elif sc2.score < sc1.score %}Zurück{% else %}Gleichstand{% endif %}{% endif %}
+        </div>
+      </div>
+    </div>
+    {% if sc1 and sc2 %}
+    <div class="mt-3">
+      <div class="progress" style="height:12px;border-radius:6px">
+        {% set total = data.wins1 + data.wins2 + 0.001 %}
+        <div class="progress-bar bg-success" style="width:{{ (data.wins1/total*100)|int }}%" title="{{ u1.display_name or u1.username }}: {{ data.wins1 }} Siege"></div>
+        <div class="progress-bar bg-secondary" style="width:{{ (data.draws/total*100)|int }}%"></div>
+        <div class="progress-bar bg-danger" style="width:{{ (data.wins2/total*100)|int }}%" title="{{ u2.display_name or u2.username }}: {{ data.wins2 }} Siege"></div>
+      </div>
+      <div class="d-flex justify-content-between small text-muted mt-1">
+        <span>{{ u1.display_name or u1.username }}: {{ data.wins1 }} Teams besser</span>
+        <span>{{ u2.display_name or u2.username }}: {{ data.wins2 }} Teams besser</span>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Team-Tabellen -->
+{% for lg_key, lg_name in leagues.items() %}
+<div class="card shadow-sm mb-3">
+  <div class="card-header {% if lg_key=='bl1' %}bg-dark{% else %}bg-secondary{% endif %} text-white">
+    <i class="bi bi-shield-fill me-2"></i>{{ lg_name }}
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead class="table-dark">
+          <tr>
+            <th class="text-center" style="width:40px">Ist</th>
+            <th>Team</th>
+            <th class="text-center" style="background:#0a2a0a;color:#7ef07e">{{ (u1.display_name or u1.username)[:10] }}</th>
+            <th class="text-center" style="background:#3a0a0a;color:#f07e7e">{{ (u2.display_name or u2.username)[:10] }}</th>
+            <th class="text-center" style="width:55px">Gewinner</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for team in teams[lg_key] %}
+          {% set actual = standings_dict.get(team.id) %}
+          {% set r1 = data.p1.get(team.id) %}
+          {% set r2 = data.p2.get(team.id) %}
+          {% set d1 = (r1 - actual)|abs if r1 and actual else none %}
+          {% set d2 = (r2 - actual)|abs if r2 and actual else none %}
+          <tr class="{% if d1 is not none and d2 is not none %}{% if d1 < d2 %}table-success table-success-subtle{% elif d2 < d1 %}table-danger-subtle{% endif %}{% endif %}">
+            <td class="text-center fw-bold text-muted">{{ actual or '–' }}</td>
+            <td>{% if team.logo_url %}<img src="{{ team.logo_url }}" style="width:16px;height:16px;object-fit:contain" class="me-1">{% endif %}{{ team.name }}</td>
+            <td class="text-center">
+              {% if r1 is not none %}
+              <span class="badge {% if d1==0 %}bg-success{% elif d1<=3 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                {{ r1 }}{% if d1 is not none %} <small>(±{{ d1 }})</small>{% endif %}
+              </span>
+              {% else %}–{% endif %}
+            </td>
+            <td class="text-center">
+              {% if r2 is not none %}
+              <span class="badge {% if d2==0 %}bg-success{% elif d2<=3 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                {{ r2 }}{% if d2 is not none %} <small>(±{{ d2 }})</small>{% endif %}
+              </span>
+              {% else %}–{% endif %}
+            </td>
+            <td class="text-center">
+              {% if d1 is not none and d2 is not none %}
+                {% if d1 < d2 %}🟢{% elif d2 < d1 %}🔴{% else %}🟡{% endif %}
+              {% else %}–{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+{% elif uid1 and uid2 %}
+<div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>Tipps erst nach Saisonbeginn sichtbar.</div>
+{% endif %}
+{% endblock %}

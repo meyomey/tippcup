@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Spieltag-Highlights{% endblock %}
+{% block content %}
+<h4 class="mb-3"><i class="bi bi-star-fill me-2 text-warning"></i>Spieltag-Highlights</h4>
+<div class="card shadow-sm">
+  <div class="card-header bg-bundesliga text-white">
+    <i class="bi bi-trophy-fill me-2 text-warning"></i>Bester Tipp des Spieltags
+  </div>
+  <div class="card-body {% if not rows %}p-4{% else %}p-0{% endif %}">
+    {% if rows %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-dark">
+          <tr>
+            <th class="text-center">Spieltag</th>
+            <th>🏆 Bester Tipper</th>
+            <th class="text-center">Verbesserung</th>
+            <th class="text-center d-none d-md-table-cell">Platz vorher → nachher</th>
+            <th class="text-center d-none d-sm-table-cell">Score +</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr class="{% if r.user_id == session.get('user_id') %}fw-bold table-info{% endif %}">
+            <td class="text-center fw-bold">{{ r.matchday }}.</td>
+            <td>
+              <span class="badge bg-warning text-dark me-1">🏅</span>
+              {{ r.display_name or r.username }}
+              {% if r.user_id == session.get('user_id') %}<span class="badge bg-primary ms-1">Ich</span>{% endif %}
+            </td>
+            <td class="text-center fw-bold text-success">+{{ r.improvement }} Pkt.</td>
+            <td class="text-center d-none d-md-table-cell">
+              {% if r.rank_before and r.rank_after %}
+              <span class="text-muted">{{ r.rank_before }}.</span>
+              <i class="bi bi-arrow-right mx-1 {% if r.rank_after < r.rank_before %}text-success{% else %}text-muted{% endif %}"></i>
+              <span class="fw-bold {% if r.rank_after < r.rank_before %}text-success{% endif %}">{{ r.rank_after }}.</span>
+              {% if r.rank_after < r.rank_before %}
+              <span class="text-success small">(+{{ r.rank_before - r.rank_after }})</span>
+              {% endif %}
+              {% else %}–{% endif %}
+            </td>
+            <td class="text-center d-none d-sm-table-cell">
+              {% if r.score_before and r.score_after %}
+              <span class="text-muted">{{ r.score_before }}</span> → <span class="fw-bold text-success">{{ r.score_after }}</span>
+              {% else %}–{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center text-muted py-3">
+      <i class="bi bi-star fs-1"></i>
+      <h5 class="mt-3">Noch keine Highlights</h5>
+      <p class="mb-1">Nach jedem abgeschlossenen Spieltag wird der Tipper mit der größten Verbesserung ausgezeichnet.</p>
+      {% if session.get('is_admin') %}
+      <p class="small text-muted">
+        <i class="bi bi-info-circle me-1"></i>
+        Als Admin: <a href="{{ url_for('admin_season') }}">Punkte neu berechnen</a> um Highlights für den aktuellen Spieltag zu generieren.
+      </p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

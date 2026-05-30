@@ -1,0 +1,56 @@
+{% extends "admin/base.html" %}
+{% block title %}Admin – Dashboard{% endblock %}
+{% block admin_content %}
+<h4 class="mb-4"><i class="bi bi-speedometer2 me-2"></i>Admin Dashboard</h4>
+{% if season %}
+<div class="alert alert-{% if season.season_started %}success{% else %}warning{% endif %} d-flex align-items-center gap-3 flex-wrap">
+  <div><strong>{{ season.name }}</strong>
+    {% if season.season_started %}<span class="badge bg-success ms-1">Läuft</span>{% else %}<span class="badge bg-warning text-dark ms-1">Noch nicht gestartet</span>{% endif %}
+    {% if season.tips_locked %}<span class="badge bg-danger ms-1">Tipps gesperrt</span>{% else %}<span class="badge bg-primary ms-1">Tipps offen</span>{% endif %}
+  </div>
+  <div class="ms-auto">
+    <form method="POST" action="{{ url_for('admin_season') }}" class="d-inline">
+      <input type="hidden" name="action" value="update_standings">
+      <button class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-clockwise me-1"></i>Beide Tabellen aktualisieren</button>
+    </form>
+  </div>
+</div>
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3"><div class="stat-card card text-center p-3 shadow-sm"><div class="stat-number text-primary">{{ stats.users }}</div><div class="stat-label">Aktive Nutzer</div></div></div>
+  <div class="col-6 col-md-3"><div class="stat-card card text-center p-3 shadow-sm"><div class="stat-number text-success">{{ stats.bl1 }}</div><div class="stat-label">BL1-Teams</div></div></div>
+  <div class="col-6 col-md-3"><div class="stat-card card text-center p-3 shadow-sm"><div class="stat-number text-warning">{{ stats.bl2 }}</div><div class="stat-label">BL2-Teams</div></div></div>
+  <div class="col-6 col-md-3"><div class="stat-card card text-center p-3 shadow-sm"><div class="stat-number text-danger">{{ stats.tippers }}</div><div class="stat-label">Tipper</div></div></div>
+</div>
+{% endif %}
+{% for lg_key, lg_name in leagues.items() %}
+{% if standings[lg_key] %}
+<div class="card shadow-sm {% if not loop.last %}mb-3{% endif %}">
+  <div class="card-header {% if lg_key=='bl1' %}bg-dark{% else %}bg-secondary{% endif %} text-white">
+    <i class="bi bi-table me-2"></i>{{ lg_name }}
+    {% if season and season.last_updated %}<small class="text-white-50 ms-2">{{ season.last_updated|localdt }}</small>{% endif %}
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0">
+        <thead class="table-dark">
+          <tr><th>#</th><th>Team</th><th class="text-center">Sp</th><th class="text-center d-none d-sm-table-cell">S/U/N</th><th class="text-center">Tore</th><th class="text-center">Pkt</th></tr>
+        </thead>
+        <tbody>
+          {% for s in standings[lg_key] %}
+          <tr>
+            <td class="fw-bold">{{ s.current_rank }}</td>
+            <td>{% if s.logo_url %}<img src="{{ s.logo_url }}" style="width:16px;height:16px;object-fit:contain" class="me-1">{% endif %}{{ s.short_name or s.name }}</td>
+            <td class="text-center">{{ s.matches_played }}</td>
+            <td class="text-center d-none d-sm-table-cell">{{ s.wins }}/{{ s.draws }}/{{ s.losses }}</td>
+            <td class="text-center">{{ s.goals_for }}:{{ s.goals_against }}</td>
+            <td class="text-center fw-bold">{{ s.points }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endfor %}
+{% endblock %}

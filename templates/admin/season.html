@@ -1,0 +1,327 @@
+{% extends "admin/base.html" %}
+{% block title %}Admin – Saison{% endblock %}
+{% block admin_content %}
+<h4 class="mb-4"><i class="bi bi-calendar-fill me-2"></i>Saison verwalten</h4>
+{% if season %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-bundesliga text-white"><i class="bi bi-star-fill me-2 text-warning"></i>Aktive Saison: {{ season.name }}</div>
+  <div class="card-body">
+    <div class="row g-3 mb-3">
+      <div class="col-6 col-md-3"><div class="text-center p-3 border rounded">
+        <div class="fw-bold {% if season.season_started %}text-success{% else %}text-warning{% endif %}">{{ '✓ Gestartet' if season.season_started else '⏳ Ausstehend' }}</div>
+        <div class="small text-muted">Saisonstatus</div></div></div>
+      <div class="col-6 col-md-3"><div class="text-center p-3 border rounded">
+        <div class="fw-bold {% if season.tips_locked %}text-danger{% else %}text-primary{% endif %}">{{ '🔒 Gesperrt' if season.tips_locked else '✏️ Offen' }}</div>
+        <div class="small text-muted">Tippabgabe</div></div></div>
+      <div class="col-6 col-md-3"><div class="text-center p-3 border rounded">
+        <div class="fw-bold text-info">BL1 + BL2</div><div class="small text-muted">Ligen</div></div></div>
+      <div class="col-6 col-md-3"><div class="text-center p-3 border rounded">
+        <div class="fw-bold text-muted">{{ season.year }}</div><div class="small text-muted">Startjahr</div></div></div>
+    </div>
+    <!-- Aktions-Gruppen -->
+    <div class="row g-3 mt-1">
+
+      <!-- Gruppe 1: Daten & Auswertung -->
+      <div class="col-12 col-lg-4">
+        <div class="card h-100 border-primary border-opacity-25">
+          <div class="card-header py-2 bg-primary bg-opacity-10 text-primary fw-semibold small">
+            <i class="bi bi-database me-1"></i>Daten & Auswertung
+          </div>
+          <div class="card-body d-flex flex-column gap-2 py-3">
+            <form method="POST"><input type="hidden" name="action" value="update_standings">
+              <button class="btn btn-primary w-100"><i class="bi bi-arrow-clockwise me-1"></i>Beide Tabellen abrufen</button>
+            </form>
+            <form method="POST"><input type="hidden" name="action" value="recalculate">
+              <button class="btn btn-outline-success w-100"><i class="bi bi-calculator me-1"></i>Punkte neu berechnen</button>
+            </form>
+            <form method="POST" onsubmit="return confirm('Alle bisherigen Verlaufs-Snapshots löschen?\n\nHistorische Verläufe können nicht wiederhergestellt werden.')">
+              <input type="hidden" name="action" value="reset_snapshots">
+              <button class="btn btn-outline-warning w-100"><i class="bi bi-arrow-counterclockwise me-1"></i>Verlauf zurücksetzen</button>
+            </form>
+            <button class="btn btn-outline-info w-100" onclick="startRebuild()">
+              <i class="bi bi-database-fill-up me-1"></i>Verlauf aus Historie aufbauen
+            </button>
+
+<!-- Rebuild-Fortschritts-Modal -->
+<div class="modal fade" id="rebuildModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-database-fill-up me-2"></i>Verlauf rekonstruieren</h5>
+      </div>
+      <div class="modal-body">
+        <p id="rebuild-status" class="text-muted small mb-2">Verbinde mit OpenligaDB…</p>
+        <div class="progress mb-2" style="height:20px">
+          <div id="rebuild-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-info"
+               style="width:0%" role="progressbar">0%</div>
+        </div>
+        <div id="rebuild-log" class="border rounded p-2 bg-light"
+             style="max-height:180px;overflow-y:auto;font-size:.75rem;font-family:monospace"></div>
+      </div>
+      <div class="modal-footer" id="rebuild-footer" style="display:none">
+        <button class="btn btn-success" onclick="location.reload()">
+          <i class="bi bi-check-circle me-1"></i>Fertig – Seite neu laden
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gruppe 2: Tippabgabe -->
+      <div class="col-12 col-lg-4">
+        <div class="card h-100 border-danger border-opacity-25">
+          <div class="card-header py-2 bg-danger bg-opacity-10 text-danger fw-semibold small">
+            <i class="bi bi-pencil-square me-1"></i>Tippabgabe
+          </div>
+          <div class="card-body d-flex flex-column gap-2 py-3">
+            <form method="POST" onsubmit="return confirm('Saisonstatus ändern?')">
+              <input type="hidden" name="action" value="toggle_started">
+              <button class="btn {% if season.season_started %}btn-outline-warning{% else %}btn-warning{% endif %} w-100">
+                <i class="bi bi-{% if season.season_started %}pause-fill{% else %}play-fill{% endif %} me-1"></i>
+                {% if season.season_started %}Saison stoppen{% else %}Saison starten{% endif %}
+              </button>
+            </form>
+            <form method="POST"><input type="hidden" name="action" value="toggle_lock">
+              <button class="btn {% if season.tips_locked %}btn-outline-success{% else %}btn-danger{% endif %} w-100">
+                <i class="bi bi-{% if season.tips_locked %}unlock{% else %}lock{% endif %}-fill me-1"></i>
+                Tippabgabe {% if season.tips_locked %}öffnen{% else %}sperren{% endif %}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gruppe 3: Kommunikation & Konfiguration -->
+      <div class="col-12 col-lg-4">
+        <div class="card h-100 border-info border-opacity-25">
+          <div class="card-header py-2 bg-info bg-opacity-10 text-info fw-semibold small">
+            <i class="bi bi-envelope me-1"></i>Kommunikation & Konfiguration
+          </div>
+          <div class="card-body d-flex flex-column gap-2 py-3">
+            <form method="POST" action="{{ url_for('admin_send_reminder') }}"
+                  onsubmit="return confirm('Erinnerungsmail an alle ohne Tipp senden?')">
+              <button class="btn btn-outline-info w-100"><i class="bi bi-envelope me-1"></i>Erinnerungsmail senden</button>
+            </form>
+            <form method="POST"><input type="hidden" name="action" value="fetch_deadlines">
+              <button class="btn btn-outline-info w-100">
+                <i class="bi bi-clock me-1"></i>Tippschluss laden
+                <small class="d-block opacity-75" style="font-size:.7rem">
+                  ({{ 'football-data.org' if 'football-data' in api_provider else 'OpenligaDB' }})
+                </small>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /row -->
+    {% if season.last_updated %}<p class="text-muted small mt-3 mb-0"><i class="bi bi-clock me-1"></i>Letztes Update: {{ season.last_updated|localdt }} Uhr</p>{% endif %}
+    <p class="small mt-1 mb-0">
+      <i class="bi bi-broadcast me-1"></i>Daten:
+      <span class="badge {% if 'football-data' in api_provider %}bg-success{% else %}bg-warning text-dark{% endif %}">
+        {{ api_provider }}
+      </span>
+      {% if 'football-data' not in api_provider %}
+      <span class="text-muted ms-1" style="font-size:.75rem">
+        (Primär: <strong>football-data.org</strong>, Fallback: OpenligaDB —
+        API-Key in passenger_wsgi.py eintragen für höhere Datenqualität)
+      </span>
+      {% endif %}
+    </p>
+  </div>
+</div>
+
+<!-- Tippschluss-Karte -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-info text-white"><i class="bi bi-clock-fill me-2"></i>Tippschluss (erstes Spiel)</div>
+  <div class="card-body">
+    <div class="row g-3 mb-3">
+      {% for lg_key, lg_name in [('bl1','1. Bundesliga'),('bl2','2. Bundesliga')] %}
+      {% set dl = season['deadline_' ~ lg_key] %}
+      <div class="col-12 col-md-6">
+        <div class="border rounded p-3 {% if dl %}border-success{% else %}border-secondary{% endif %}">
+          <div class="fw-semibold mb-1">{{ lg_name }}</div>
+          {% if dl %}
+            <div class="text-success fw-bold">
+              <i class="bi bi-check-circle me-1"></i>
+              {{ dl[:10].split('-')|reverse|join('.') }} um {{ dl[11:16] }} Uhr
+            </div>
+            <div class="text-muted small">(Anpfiff erstes Spiel – Tippabgabe endet automatisch)</div>
+          {% else %}
+            <div class="text-muted"><i class="bi bi-dash-circle me-1"></i>Noch nicht ermittelt</div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="row g-3">
+      <div class="col-12 col-md-6">
+        <p class="fw-semibold mb-2"><i class="bi bi-cloud-download me-1"></i>Automatisch laden ({{ 'football-data.org' if 'football-data' in api_provider else 'OpenligaDB' }}):</p>
+        <form method="POST">
+          <input type="hidden" name="action" value="fetch_deadlines">
+          <button class="btn btn-outline-info btn-sm">
+            <i class="bi bi-clock me-1"></i>Tippschluss jetzt abrufen
+          </button>
+        </form>
+        <p class="text-muted small mt-2 mb-0">Liest den Anpfiff des ersten Spieltags aus ({{ 'football-data.org' if 'football-data' in api_provider else 'OpenligaDB' }}).</p>
+      </div>
+      <div class="col-12 col-md-6">
+        <p class="fw-semibold mb-2"><i class="bi bi-pencil me-1"></i>Manuell setzen (falls API nicht erreichbar):</p>
+        <form method="POST" class="row g-2">
+          <input type="hidden" name="action" value="set_deadline">
+          <div class="col-12">
+            <label class="form-label small">1. Bundesliga – erstes Spiel</label>
+            <input type="datetime-local" name="deadline_bl1" class="form-control form-control-sm"
+                   value="{{ season.deadline_bl1[:16] if season.deadline_bl1 else '' }}">
+          </div>
+          <div class="col-12">
+            <label class="form-label small">2. Bundesliga – erstes Spiel</label>
+            <input type="datetime-local" name="deadline_bl2" class="form-control form-control-sm"
+                   value="{{ season.deadline_bl2[:16] if season.deadline_bl2 else '' }}">
+          </div>
+          <div class="col-12">
+            <button type="submit" class="btn btn-bundesliga btn-sm">
+              <i class="bi bi-save me-1"></i>Tippschluss speichern
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-dark text-white"><i class="bi bi-plus-circle me-2"></i>Neue Saison anlegen</div>
+  <div class="card-body">
+    <div class="alert alert-warning py-2 mb-3"><i class="bi bi-exclamation-triangle me-2"></i>Eine neue Saison deaktiviert die aktuelle. Alte Daten bleiben erhalten.</div>
+    <form method="POST" class="row g-2 align-items-end" onsubmit="return confirm('Neue Saison anlegen?')">
+      <input type="hidden" name="action" value="create">
+      <div class="col-12 col-sm-4"><label class="form-label small fw-semibold">Startjahr *</label>
+        <input type="number" name="year" class="form-control" required placeholder="z.B. 2025" min="2020" max="2040"></div>
+      <div class="col-12 col-sm-6"><label class="form-label small fw-semibold">Name (optional)</label>
+        <input type="text" name="name" class="form-control" placeholder="z.B. Bundesliga 2025/26"></div>
+      <div class="col-12 col-sm-2 d-flex align-items-end">
+        <button type="submit" class="btn btn-bundesliga w-100"><i class="bi bi-plus-lg"></i></button></div>
+    </form>
+    <p class="text-muted small mt-2 mb-0"><i class="bi bi-info-circle me-1"></i>Nach dem Anlegen unter Teams → „Beide Ligen importieren".</p>
+  </div>
+</div>
+
+{% if all_seasons %}
+<div class="card shadow-sm">
+  <div class="card-header"><i class="bi bi-list-ul me-2"></i>Alle Saisons</div>
+  <div class="card-body p-0">
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-dark"><tr><th>Name</th><th class="text-center">Status</th><th class="text-center">Erstellt</th><th class="text-center">Aktion</th></tr></thead>
+      <tbody>
+        {% for s in all_seasons %}
+        <tr class="{% if s.is_active %}table-primary{% endif %}">
+          <td class="fw-{% if s.is_active %}bold{% else %}normal{% endif %}">{{ s.name }}</td>
+          <td class="text-center">{% if s.is_active %}<span class="badge bg-success">Aktiv</span>{% else %}<span class="badge bg-secondary">Inaktiv</span>{% endif %}</td>
+          <td class="text-center text-muted small">{{ s.created_at[:10] }}</td>
+          <td class="text-center d-flex gap-1 justify-content-center">
+            {% if not s.is_active %}
+            <form method="POST" onsubmit="return confirm('Aktivieren?')">
+              <input type="hidden" name="action" value="activate">
+              <input type="hidden" name="season_id" value="{{ s.id }}">
+              <button class="btn btn-sm btn-outline-primary">Aktivieren</button>
+            </form>
+            <form method="POST" onsubmit="return confirm('Saison „{{ s.name }}" wirklich löschen?\n\nAlle Tipps, Standings und Scores dieser Saison werden unwiderruflich gelöscht.')">
+              <input type="hidden" name="action" value="delete_season">
+              <input type="hidden" name="season_id" value="{{ s.id }}">
+              <button class="btn btn-sm btn-outline-danger" title="Saison löschen">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+            {% else %}<span class="text-muted small">Aktiv</span>{% endif %}
+            <a href="{{ url_for('admin_season_export_csv', sid=s.id) }}"
+               class="btn btn-sm btn-outline-success" title="Abschluss-CSV exportieren">
+              <i class="bi bi-download"></i> CSV
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<script>
+function startRebuild() {
+  if (!confirm('Kompletten Verlauf aus OpenligaDB rekonstruieren?\n\nDas kann je nach Anzahl Spieltage 1–2 Minuten dauern. Fortschritt wird live angezeigt.')) return;
+
+  const modal  = new bootstrap.Modal(document.getElementById('rebuildModal'));
+  const bar    = document.getElementById('rebuild-bar');
+  const status = document.getElementById('rebuild-status');
+  const log    = document.getElementById('rebuild-log');
+  const footer = document.getElementById('rebuild-footer');
+  modal.show();
+
+  let total = 0;
+  let done  = 0;
+
+  const es = new EventSource('/admin/rebuild_history_stream');
+
+  es.onmessage = function(e) {
+    const msg = e.data;
+    if (msg.startsWith('START:')) {
+      total = parseInt(msg.split(':')[1]) || 0;
+      status.textContent = '0 von ' + total + ' Spieltagen verarbeitet...';
+    } else if (msg.startsWith('OK:')) {
+      done++;
+      const md  = msg.split(':')[1];
+      const pct = total > 0 ? Math.round(done / total * 100) : 0;
+      bar.style.width = pct + '%';
+      bar.textContent = pct + '%';
+      status.textContent = done + ' von ' + total + ' Spieltagen verarbeitet...';
+      addLog('\u2713 Spieltag ' + md + ' gespeichert');
+    } else if (msg.startsWith('SKIP:')) {
+      done++;
+      const md  = msg.split(':')[1];
+      const pct = total > 0 ? Math.round(done / total * 100) : 0;
+      bar.style.width = pct + '%';
+      bar.textContent = pct + '%';
+      addLog('\u2192 Spieltag ' + md + ' bereits vorhanden');
+    } else if (msg.startsWith('WARN:')) {
+      addLog('\u26a0 ' + msg.slice(5), 'text-warning');
+    } else if (msg.startsWith('ERROR:')) {
+      addLog('\u2717 ' + msg.slice(6), 'text-danger');
+      es.close();
+      status.textContent = 'Fehler aufgetreten.';
+      footer.style.display = '';
+    } else if (msg.startsWith('DONE:')) {
+      es.close();
+      const parts = msg.split(':');
+      bar.style.width = '100%';
+      bar.textContent = '100%';
+      bar.classList.remove('progress-bar-animated');
+      bar.classList.remove('bg-info');
+      bar.classList.add('bg-success');
+      status.textContent = 'Fertig! ' + parts[1] + ' Spieltage neu aufgebaut, ' + parts[2] + ' bereits vorhanden.';
+      footer.style.display = '';
+    }
+  };
+
+  es.onerror = function() {
+    es.close();
+    status.textContent = 'Verbindung unterbrochen.';
+    addLog('Verbindung zum Server verloren.', 'text-danger');
+    footer.style.display = '';
+  };
+
+  function addLog(text, cls) {
+    const line = document.createElement('div');
+    line.textContent = text;
+    if (cls) line.className = cls;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+  }
+}
+</script>
+{% endblock %}

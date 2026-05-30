@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Archiv{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="mb-0"><i class="bi bi-clock-history me-2"></i>Tipp-Archiv</h4>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('archiv_ewige_tabelle') }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-stars me-1"></i>Ewige Tabelle
+    </a>
+    <a href="{{ url_for('archiv_angsthasen') }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-emoji-dizzy me-1"></i>Angsthasen
+    </a>
+    {% if session.get('is_admin') %}
+    <a href="{{ url_for('admin_archiv_import') }}" class="btn btn-sm btn-outline-secondary no-print">
+      <i class="bi bi-upload me-1"></i>CSV importieren
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+{% if not seasons %}
+<div class="card shadow-sm">
+  <div class="card-body text-center py-5 text-muted">
+    <i class="bi bi-archive fs-1"></i>
+    <h5 class="mt-3">Noch keine Archiv-Daten vorhanden</h5>
+    {% if session.get('is_admin') %}
+    <a href="{{ url_for('admin_archiv_import') }}" class="btn btn-bundesliga mt-2">
+      <i class="bi bi-upload me-2"></i>CSV jetzt importieren
+    </a>
+    {% endif %}
+  </div>
+</div>
+{% else %}
+
+{# Saison-Auswahl #}
+<div class="card shadow-sm mb-3">
+  <div class="card-body py-2">
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+      <span class="text-muted small fw-semibold">Saison:</span>
+      {% for s in seasons %}
+      <a href="{{ url_for('archiv', season=s) }}"
+         class="btn btn-sm {{ 'btn-bundesliga' if s == season_param else 'btn-outline-secondary' }}">
+        {{ s }}
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{# Tabelle #}
+{% if rows %}
+{% set season_data = rows[0] %}
+<div class="card shadow-sm">
+  <div class="card-header bg-bundesliga text-white d-flex align-items-center justify-content-between">
+    <span><i class="bi bi-trophy me-2"></i>Abschlusstabelle {{ season_param }}</span>
+    <small class="opacity-75">{{ season_data.spieltag_1l }} BL1-Spieltage · {{ season_data.spieltag_2l }} BL2-Spieltage</small>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover table-sm mb-0 align-middle">
+      <thead class="table-light">
+        <tr>
+          <th class="text-center" style="width:3rem">#</th>
+          <th>Tipper</th>
+          <th class="text-center" title="Abweichung Gesamt">Abw. ges.</th>
+          <th class="text-center d-none d-sm-table-cell" title="Abweichung BL1">Abw. BL1</th>
+          <th class="text-center d-none d-sm-table-cell" title="Höchste Einzelabweichung BL1">Max BL1</th>
+          <th class="text-center d-none d-sm-table-cell" title="Abweichung BL2">Abw. BL2</th>
+          <th class="text-center d-none d-sm-table-cell" title="Höchste Einzelabweichung BL2">Max BL2</th>
+          <th class="text-center d-none d-md-table-cell" title="Standardabweichung gesamt">σ ges.</th>
+          <th class="text-center d-none d-md-table-cell" title="Volltreffer gesamt">🎯</th>
+          <th class="text-end" style="width:4rem"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr class="{{ 'table-warning fw-bold' if row.rang == 1 else ('bg-light' if row.rang <= 3 else '') }}">
+          <td class="text-center">
+            {% if row.rang == 1 %}🥇
+            {% elif row.rang == 2 %}🥈
+            {% elif row.rang == 3 %}🥉
+            {% else %}<span class="text-muted">{{ row.rang }}</span>{% endif %}
+          </td>
+          <td>
+            {% if row.user_id %}
+            <a href="{{ url_for('archiv_karriere', tipper_name=row.tipper) }}" class="text-decoration-none fw-semibold">
+              {{ row.display_name or row.username }}
+            </a>
+            {% else %}
+            <a href="{{ url_for('archiv_karriere', tipper_name=row.tipper) }}" class="text-decoration-none text-muted">
+              {{ row.tipper }}
+            </a>
+            {% endif %}
+          </td>
+          <td class="text-center fw-semibold">{{ row.abw_ges | int }}</td>
+          <td class="text-center d-none d-sm-table-cell text-muted">{{ row.abw_1l | int }}</td>
+          <td class="text-center d-none d-sm-table-cell {% if row.maxabw_1l and row.maxabw_1l == max_abw1 %}text-danger fw-bold{% else %}text-muted{% endif %}">
+            {{ row.maxabw_1l | int if row.maxabw_1l else '–' }}{% if row.maxabw_1l and row.maxabw_1l == max_abw1 %} 🔥{% endif %}
+          </td>
+          <td class="text-center d-none d-sm-table-cell text-muted">{{ row.abw_2l | int }}</td>
+          <td class="text-center d-none d-sm-table-cell {% if row.maxabw_2l and row.maxabw_2l == max_abw2 %}text-danger fw-bold{% else %}text-muted{% endif %}">
+            {{ row.maxabw_2l | int if row.maxabw_2l else '–' }}{% if row.maxabw_2l and row.maxabw_2l == max_abw2 %} 🔥{% endif %}
+          </td>
+          <td class="text-center d-none d-md-table-cell text-muted">{{ '%.2f' | format(row.stdabw_ges) }}</td>
+          <td class="text-center d-none d-md-table-cell">{{ row.treffer_ges }}</td>
+          <td class="text-end">
+            <a href="{{ url_for('archiv_karriere', tipper_name=row.tipper) }}"
+               class="btn btn-xs btn-outline-secondary py-0 px-1" title="Karriere">
+              <i class="bi bi-person-lines-fill"></i>
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="alert alert-info">Keine Daten für diese Saison.</div>
+{% endif %}
+{% endif %}
+{% endblock %}

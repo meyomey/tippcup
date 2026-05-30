@@ -1,0 +1,439 @@
+{% extends "base.html" %}
+{% block title %}Bestenliste{% endblock %}
+
+{% macro player_name(s, badges=[], wildcard_id=none, show_me=true, bdefs={}) %}
+{%- set tt_parts = [] %}
+{%- if s.full_name %}{% set tt_parts = tt_parts + [s.full_name] %}{% endif %}
+{%- if s.favorite_club %}{% set tt_parts = tt_parts + ['⚽ ' + s.favorite_club] %}{% endif %}
+{%- set tooltip = tt_parts | join(' · ') %}
+<span {% if tooltip %}class="tippcup-tooltip" data-tooltip="{{ tooltip }}"{% endif %}>
+  {{- s.display_name or s.username -}}
+</span>
+{%- if show_me and s.id == session.get('user_id') %}
+<span class="badge bg-primary ms-1" style="font-size:.65rem">Ich</span>
+{%- endif %}
+{%- if wildcard_id and s.id == wildcard_id %}
+<span class="badge bg-danger ms-1" style="font-size:.65rem" title="Höchste Einzelabweichung">🎲</span>
+{%- endif %}
+{%- for btype in badges %}
+{%- set bdef = bdefs.get(btype, {}) %}
+<span class="badge bg-warning text-dark ms-1" title="{{ bdef.get('desc','') }}">{{ bdef.get('emoji','🏅') }}</span>
+{%- endfor %}
+{% endmacro %}
+{% block content %}
+<div class="d-flex justify-content-end mb-2 no-print">
+  <button class="btn btn-sm btn-print" onclick="window.print()">
+    <i class="bi bi-printer me-1"></i>PDF / Drucken
+  </button>
+</div>
+<div class="print-header d-none">
+  <h3>⚽ Tippcup Bundesliga – Bestenliste</h3>
+</div>
+
+<div class="row">
+  <div class="col-12 col-lg-10 mx-auto">
+
+    <div class="card shadow-sm">
+      <div class="card-header bg-bundesliga text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span><i class="bi bi-trophy-fill me-2 text-warning"></i>Bestenliste</span>
+        <div class="d-flex flex-column align-items-end gap-1">
+          {% if season %}<span class="badge bg-light text-dark">{{ season.name }} · max. {{ max_score }} Pkt.</span>{% endif %}
+          {% if season and season.last_updated %}
+          <small class="text-white-50" style="font-size:.7rem">
+            <i class="bi bi-arrow-clockwise me-1"></i>Tabelle: {{ season.last_updated|localdt }} Uhr
+          </small>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card-body p-0">
+        {% if scores %}
+
+        {# ══════════════════════════════════════════
+           MOBILE-ANSICHT (< md): Karten mit Aufklapp
+           ══════════════════════════════════════════ #}
+        <div class="d-md-none">
+          {% for s in scores %}
+          {% set rank = loop.index %}
+          <div class="lb-card {% if s.id == session.get('user_id') %}lb-card-me{% endif %}"
+               onclick="toggleDetail(this)">
+
+            {# Hauptzeile – immer sichtbar #}
+            <div class="lb-card-main">
+              <div class="lb-rank">
+                {% if rank == 1 %}🥇{% elif rank == 2 %}🥈{% elif rank == 3 %}🥉
+                {% else %}<span class="lb-rank-num">{{ rank }}</span>{% endif %}
+              </div>
+              <div class="lb-name">
+                {{ player_name(s, user_badges_map.get(s.id, []), wildcard_id, bdefs=badge_defs) }}
+              </div>
+              <div class="lb-score-main">
+                <span class="lb-score-num">{{ s.score }}</span>
+                <span class="lb-score-label">Pkt.</span>
+              </div>
+              <div class="lb-chevron"><i class="bi bi-chevron-down"></i></div>
+            </div>
+
+            {# Detailbereich – nach Antippen ausgeklappt #}
+            <div class="lb-card-detail">
+              <div class="lb-detail-grid">
+                <div class="lb-detail-item">
+                  <div class="lb-detail-label">1. Bundesliga</div>
+                  <div class="lb-detail-value">
+                    <strong>{{ s.score_bl1 }}</strong>
+                    <small class="text-muted">(Abw. {{ s.deviation_bl1 }})</small>
+                  </div>
+                </div>
+                <div class="lb-detail-item">
+                  <div class="lb-detail-label">2. Bundesliga</div>
+                  <div class="lb-detail-value">
+                    <strong>{{ s.score_bl2 }}</strong>
+                    <small class="text-muted">(Abw. {{ s.deviation_bl2 }})</small>
+                  </div>
+                </div>
+                <div class="lb-detail-item">
+                  <div class="lb-detail-label">Abweichung gesamt</div>
+                  <div class="lb-detail-value">{{ s.total_deviation }}</div>
+                </div>
+                <div class="lb-detail-item">
+                  <div class="lb-detail-label">🎯 Volltreffer</div>
+                  <div class="lb-detail-value">
+                    <span class="badge {% if (s.volltreffer or 0) >= 6 %}bg-success{% elif (s.volltreffer or 0) >= 3 %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                      {{ s.volltreffer or 0 }}
+                    </span>
+                  </div>
+                </div>
+                <div class="lb-detail-item">
+                  <div class="lb-detail-label">Größte Abweichung</div>
+                  <div class="lb-detail-value">
+                    {% set md1 = max_dev_map.get(s.id, {}).get('bl1') %}
+                    {% set md2 = max_dev_map.get(s.id, {}).get('bl2') %}
+                    {% if md1 or md2 %}
+                    <div class="d-flex flex-column gap-1">
+                      {% if md1 %}
+                      <span title="Tipp: {{ md1.tipp }}. Platz – Ist: {{ md1.actual }}. Platz">
+                        <span class="badge badge-sm {% if md1.dev <= 3 %}bg-success{% elif md1.dev <= 8 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                          BL1 {{ md1.dev }}{% if s.id in wildcard_bl1_ids %} 🎲{% endif %}
+                        </span>
+                        <small class="text-muted ms-1">{{ md1.team }}</small>
+                        {% if s.id in wildcard_bl1_ids %}<small class="text-danger fw-bold ms-1">höchste!</small>{% endif %}
+                      </span>
+                      {% endif %}
+                      {% if md2 %}
+                      <span title="Tipp: {{ md2.tipp }}. Platz – Ist: {{ md2.actual }}. Platz">
+                        <span class="badge badge-sm {% if md2.dev <= 3 %}bg-success{% elif md2.dev <= 8 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                          BL2 {{ md2.dev }}{% if s.id in wildcard_bl2_ids %} 🎲{% endif %}
+                        </span>
+                        <small class="text-muted ms-1">{{ md2.team }}</small>
+                        {% if s.id in wildcard_bl2_ids %}<small class="text-danger fw-bold ms-1">höchste!</small>{% endif %}
+                      </span>
+                      {% endif %}
+                    </div>
+                    {% else %}
+                    <span class="badge {% if (s.max_deviation or 0) <= 3 %}bg-success{% elif (s.max_deviation or 0) <= 8 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                      {% if s.id == wildcard_id %}🎲 {% endif %}{{ s.max_deviation or 0 }}
+                    </span>
+                    {% if s.id == wildcard_id %}<small class="text-danger ms-1">höchste!</small>{% endif %}
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="lb-detail-item">
+                  <div class="lb-detail-label">Standardabweichung σ</div>
+                  <div class="lb-detail-value">{{ '%.3f'|format(s.std_deviation or 0) }}</div>
+                </div>
+              </div>
+
+              {# Score-Balken BL1 vs BL2 #}
+              {% if s.score > 0 %}
+              <div class="mt-2 px-1">
+                <div class="d-flex justify-content-between small text-muted mb-1">
+                  <span>BL1 {{ s.score_bl1 }}</span>
+                  <span>BL2 {{ s.score_bl2 }}</span>
+                </div>
+                <div class="progress" style="height:8px;border-radius:4px">
+                  <div class="progress-bar bg-dark" style="width:{{ (s.score_bl1 / max_score * 100)|int }}%"
+                       title="1. Bundesliga: {{ s.score_bl1 }} Pkt."></div>
+                  <div class="progress-bar bg-secondary" style="width:{{ (s.score_bl2 / max_score * 100)|int }}%"
+                       title="2. Bundesliga: {{ s.score_bl2 }} Pkt."></div>
+                </div>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+          {% if not loop.last %}<div class="lb-divider"></div>{% endif %}
+          {% endfor %}
+        </div>
+
+        {# ══════════════════════════════════════════
+           DESKTOP-ANSICHT (≥ md): Tabelle
+           ══════════════════════════════════════════ #}
+        <div class="d-none d-md-block table-responsive">
+          <table class="table table-hover mb-0 align-middle">
+            <thead class="table-dark">
+              <tr>
+                <th class="text-center" style="width:50px">Platz</th>
+                <th>Spieler</th>
+                <th class="text-center">
+                  BL1
+                  <small class="d-block text-white-50" style="font-size:.7rem">Score (Abw.)</small>
+                </th>
+                <th class="text-center">
+                  BL2
+                  <small class="d-block text-white-50" style="font-size:.7rem">Score (Abw.)</small>
+                </th>
+                <th class="text-center d-none d-lg-table-cell">
+                  Abw. ∑
+                  <small class="d-block text-white-50" style="font-size:.7rem">gesamt</small>
+                </th>
+                <th class="text-center d-none d-lg-table-cell">
+                  σ
+                  <small class="d-block text-warning" style="font-size:.7rem" title="2. Kriterium bei Punktgleichstand">↓ Tie 1</small>
+                </th>
+                <th class="text-center d-none d-lg-table-cell" colspan="2">
+                  Max Abw.
+                  <small class="d-block text-white-50" style="font-size:.7rem">BL1 · BL2 + Verein</small>
+                </th>
+                <th class="text-center d-none d-lg-table-cell">
+                  🎯
+                  <small class="d-block text-warning" style="font-size:.7rem" title="3. Kriterium bei Punktgleichstand">↑ Tie 2</small>
+                </th>
+                <th class="text-center fw-bold fs-5">Gesamt</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for s in scores %}
+              <tr class="{% if loop.index==1 %}table-warning{% elif loop.index==2 %}table-secondary{% elif loop.index==3 %}table-light{% endif %}
+                         {% if s.id == session.get('user_id') %}fw-bold{% endif %}">
+                <td class="text-center fw-bold fs-5">
+                  {% if loop.index==1 %}🥇{% elif loop.index==2 %}🥈{% elif loop.index==3 %}🥉{% else %}{{ loop.index }}{% endif %}
+                </td>
+                <td>
+                  {%- set _tt = [] %}
+                  {%- if s.full_name %}{% set _tt = _tt + [s.full_name] %}{% endif %}
+                  {%- if s.favorite_club %}{% set _tt = _tt + ['⚽ ' + s.favorite_club] %}{% endif %}
+                  {%- set _tooltip = _tt | join(' · ') %}
+                  {% if _tooltip %}
+                  <span class="tippcup-tooltip" data-tooltip="{{ _tooltip }}">{{ s.display_name or s.username }}</span>
+                  {% else %}
+                  {{ s.display_name or s.username }}
+                  {% endif %}
+                  {% if s.id == session.get('user_id') %}<span class="badge bg-primary ms-1">Ich</span>{% endif %}
+                  {% if s.id == wildcard_id %}<span class="badge bg-danger ms-1" title="Höchste Einzelabweichung">🎲 Wildcard</span>{% endif %}
+                  {% for btype in user_badges_map.get(s.id, []) %}
+                  {% set bdef = badge_defs.get(btype, {}) %}
+                  {% if bdef and btype != 'wildcard' %}
+                  <span class="badge bg-warning text-dark ms-1" title="{{ bdef.desc }}">{{ bdef.emoji }}</span>
+                  {% endif %}
+                  {% endfor %}
+                </td>
+                <td class="text-center">
+                  <span class="fw-bold">{{ s.score_bl1 }}</span>
+                  <small class="text-muted">({{ s.deviation_bl1 }})</small>
+                </td>
+                <td class="text-center">
+                  <span class="fw-bold">{{ s.score_bl2 }}</span>
+                  <small class="text-muted">({{ s.deviation_bl2 }})</small>
+                </td>
+                <td class="text-center d-none d-lg-table-cell text-muted">{{ s.total_deviation }}</td>
+                <td class="text-center d-none d-lg-table-cell">
+                  <span class="badge bg-secondary">{{ '%.3f'|format(s.std_deviation or 0) }}</span>
+                </td>
+                {% set md1 = max_dev_map.get(s.id, {}).get('bl1') %}
+                {% set md2 = max_dev_map.get(s.id, {}).get('bl2') %}
+                <td class="text-center d-none d-lg-table-cell" style="font-size:.8rem">
+                  {% if md1 %}
+                  <span class="badge {% if md1.dev<=3 %}bg-success{% elif md1.dev<=8 %}bg-warning text-dark{% else %}bg-danger{% endif %}{% if s.id in wildcard_bl1_ids %} border border-2 border-warning{% endif %}"
+                        title="{{ md1.team }}: Tipp {{ md1.tipp }}. – Ist {{ md1.actual }}.">
+                    {% if s.id in wildcard_bl1_ids %}🎲 {% endif %}BL1 {{ md1.dev }}
+                  </span>
+                  <div class="text-muted mt-1" style="font-size:.7rem;max-width:8rem;margin:0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ md1.team }}">{{ md1.team }}</div>
+                  {% if s.id in wildcard_bl1_ids %}<div class="text-danger fw-bold" style="font-size:.65rem">höchste!</div>{% endif %}
+                  {% else %}–{% endif %}
+                </td>
+                <td class="text-center d-none d-lg-table-cell" style="font-size:.8rem">
+                  {% if md2 %}
+                  <span class="badge {% if md2.dev<=3 %}bg-success{% elif md2.dev<=8 %}bg-warning text-dark{% else %}bg-danger{% endif %}{% if s.id in wildcard_bl2_ids %} border border-2 border-warning{% endif %}"
+                        title="{{ md2.team }}: Tipp {{ md2.tipp }}. – Ist {{ md2.actual }}.">
+                    {% if s.id in wildcard_bl2_ids %}🎲 {% endif %}BL2 {{ md2.dev }}
+                  </span>
+                  <div class="text-muted mt-1" style="font-size:.7rem;max-width:8rem;margin:0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ md2.team }}">{{ md2.team }}</div>
+                  {% if s.id in wildcard_bl2_ids %}<div class="text-danger fw-bold" style="font-size:.65rem">höchste!</div>{% endif %}
+                  {% else %}–{% endif %}
+                </td>
+                <td class="text-center d-none d-lg-table-cell">
+                  <span class="badge {% if (s.volltreffer or 0) >= 6 %}bg-success{% elif (s.volltreffer or 0) >= 3 %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                    🎯 {{ s.volltreffer or 0 }}
+                  </span>
+                </td>
+                <td class="text-center fw-bold fs-4 text-success">{{ s.score }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        {% if pending_users %}
+        <div class="border-top p-3">
+          <h6 class="text-muted small"><i class="bi bi-hourglass me-2"></i>Tipps abgegeben, noch kein Score:</h6>
+          <div class="d-flex flex-wrap gap-2">
+            {% for u in pending_users %}
+            <span class="badge bg-secondary">{{ u.display_name or u.username }}</span>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if wildcard_id %}
+        <div class="px-3 py-2 border-top text-muted small">
+          <div class="mb-1">
+            <i class="bi bi-info-circle me-1"></i>
+            <strong>Rangfolge:</strong>
+            <strong>1.</strong> Gesamtpunkte &nbsp;·&nbsp;
+            <strong>2.</strong> σ (Standardabweichung, niedrigere = besser) &nbsp;·&nbsp;
+            <strong>3.</strong> 🎯 Volltreffer (mehr = besser)
+          </div>
+          {% if badge_defs %}
+          <div class="d-flex flex-wrap gap-2 mt-1 pt-1 border-top">
+            <span class="fw-semibold text-dark me-1">Abzeichen:</span>
+            {% for key, b in badge_defs.items() %}
+            <span title="{{ b.desc }}">{{ b.emoji }} <strong>{{ b.label }}</strong> = {{ b.desc }}</span>
+            {% if not loop.last %}<span class="text-secondary">·</span>{% endif %}
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {% elif season and not season.season_started %}
+        <div class="text-center p-5">
+          <i class="bi bi-clock fs-1 text-muted"></i>
+          <h5 class="mt-3 text-muted">Saison noch nicht gestartet</h5>
+          <p class="text-muted">Bestenliste erscheint nach dem ersten Spieltag.</p>
+          {% if pending_users %}
+          <hr>
+          <h6>Tipps bereits abgegeben ({{ pending_users|length }}):</h6>
+          <div class="d-flex flex-wrap justify-content-center gap-2 mt-2">
+            {% for u in pending_users %}
+            <span class="badge bg-success fs-6">{{ u.display_name or u.username }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        {% else %}
+        <div class="text-center p-5 text-muted">
+          <i class="bi bi-bar-chart fs-1"></i>
+          <p class="mt-2">Noch keine Punkte berechnet.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {# Hinweis auf Mobile #}
+    <p class="text-muted text-center small mt-2 d-md-none no-print">
+      <i class="bi bi-hand-index me-1"></i>Auf einen Spieler tippen für alle Details
+    </p>
+
+    <!-- Erklärung & Links -->
+    <div class="card shadow-sm mt-3">
+      <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span><i class="bi bi-question-circle me-2"></i>Punkteberechnung</span>
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="{{ url_for('verlauf') }}" class="btn btn-sm btn-outline-success">
+            <i class="bi bi-graph-up me-1"></i>Verlaufsgrafik
+          </a>
+          <a href="{{ url_for('angsthasen') }}" class="btn btn-sm btn-outline-warning">
+            <i class="bi bi-emoji-dizzy me-1"></i>Angsthasenbilanz
+          </a>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-6 col-md-3">
+            <div class="lb-legend-item">
+              <div class="lb-legend-title">Score pro Liga</div>
+              <div class="small text-muted">162 − Abweichungssumme</div>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="lb-legend-item">
+              <div class="lb-legend-title">🎯 Volltreffer</div>
+              <div class="small text-muted">Teams exakt getroffen</div>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="lb-legend-item">
+              <div class="lb-legend-title">Max</div>
+              <div class="small text-muted">Größter Einzelausreißer<br>
+                <span class="badge bg-success" style="font-size:.6rem">≤3</span>
+                <span class="badge bg-warning text-dark" style="font-size:.6rem">≤8</span>
+                <span class="badge bg-danger" style="font-size:.6rem">&gt;8</span>
+              </div>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="lb-legend-item">
+              <div class="lb-legend-title">σ Standardabweichung</div>
+              <div class="small text-muted">Wie gleichmäßig getippt</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleDetail(card) {
+  const isOpen = card.classList.contains('lb-card-open');
+  document.querySelectorAll('.lb-card-open').forEach(c => {
+    c.classList.remove('lb-card-open');
+    c.querySelector('.lb-chevron i').className = 'bi bi-chevron-down';
+  });
+  if (!isOpen) {
+    card.classList.add('lb-card-open');
+    card.querySelector('.lb-chevron i').className = 'bi bi-chevron-up';
+  }
+}
+
+// Auto-Refresh: prüft alle 3 Minuten ob sich Scores geändert haben
+(function() {
+  {% if season and season.season_started %}
+  const knownUpdated = {{ (season.last_updated or '')|tojson }};
+  let refreshTimer = null;
+
+  async function checkScores() {
+    try {
+      const r = await fetch('/leaderboard/scores');
+      const d = await r.json();
+      if (!d.ok) return;
+      // Wenn last_updated neuer als bekannt → Seite neu laden
+      if (d.last_updated && d.last_updated !== knownUpdated) {
+        showRefreshBanner();
+      }
+    } catch(e) {}
+  }
+
+  function showRefreshBanner() {
+    // Seite automatisch neu laden und Banner zeigen
+    clearInterval(refreshTimer);
+    const banner = document.createElement('div');
+    banner.className = 'alert alert-success alert-dismissible py-2 mb-3';
+    banner.innerHTML = '<i class="bi bi-arrow-clockwise me-2"></i>'
+      + '<strong>Bestenliste aktualisiert!</strong> Neue Ergebnisse verfügbar. '
+      + '<button class="btn btn-sm btn-success ms-2" onclick="location.reload()">Jetzt laden</button>'
+      + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+    const col = document.querySelector('.col-12.col-lg-10');
+    if (col) col.insertBefore(banner, col.firstChild);
+    // Automatisch nach 3 Sekunden neu laden
+    setTimeout(() => location.reload(), 3000);
+  }
+
+  // Alle 3 Minuten prüfen (sehr schonend)
+  refreshTimer = setInterval(checkScores, 180000);
+  {% endif %}
+})();
+</script>
+{% endblock %}

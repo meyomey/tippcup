@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block title %}Ewige Tabelle{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="mb-0"><i class="bi bi-stars me-2 text-warning"></i>Ewige Tabelle</h4>
+  <button class="btn btn-outline-secondary btn-sm no-print" onclick="window.print()">
+    <i class="bi bi-printer me-1"></i>PDF / Drucken
+  </button>
+</div>
+
+<!-- Druckkopf (nur im Druck sichtbar) -->
+<div class="print-header d-none">
+  <h2>⚽ Tippcup Bundesliga – Ewige Tabelle</h2>
+  <p>Stand: {{ now if now else '' }}</p>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header bg-bundesliga text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span><i class="bi bi-stars me-2 text-warning"></i>Alle Saisons zusammengefasst</span>
+    <div class="d-flex gap-2 align-items-center">
+      <span class="badge bg-light text-dark">{{ seasons|length }} App-Saison{{ 'en' if seasons|length != 1 }}</span>
+      <a href="{{ url_for('archiv_ewige_tabelle') }}" class="btn btn-sm btn-outline-light py-0">
+        <i class="bi bi-clock-history me-1"></i>Archiv
+      </a>
+    </div>
+  </div>
+  <div class="card-body p-0">
+    {% if rows %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-dark">
+          <tr>
+            <th class="text-center" style="width:50px">#</th>
+            <th>Spieler</th>
+            <th class="text-center">Saisons</th>
+            <!-- Dynamische Saison-Spalten -->
+            {% for s in seasons %}
+            <th class="text-center d-none d-xl-table-cell" style="min-width:75px">
+              <span class="small">{{ s.year }}/{{ s.year+1 - 2000 }}</span>
+            </th>
+            {% endfor %}
+            <th class="text-center d-none d-md-table-cell">Ø Score</th>
+            <th class="text-center d-none d-md-table-cell">Bestwert</th>
+            <th class="text-center fw-bold fs-5">Gesamt</th>
+            <th class="text-center d-none d-lg-table-cell border-start" colspan="4"
+                style="background:#1a5e2a22;font-size:.75rem;letter-spacing:.04em">
+              📁 ARCHIV (normierter Rang-Ø · kleiner = besser)
+            </th>
+          </tr>
+          <tr class="d-none d-lg-table-row" style="font-size:.75rem">
+            <th colspan="{% if seasons %}{{ seasons|length + 5 }}{% else %}5{% endif %}" class="p-0"></th>
+            <th class="text-center border-start" title="Archiv-Rang nach normiertem Rang-Durchschnitt">Archiv-Rang</th>
+            <th class="text-center" title="Anzahl Archiv-Saisons">Saisons</th>
+            <th class="text-center" title="Normierter Rang-Durchschnitt (Rang×100÷Teilnehmer, gemittelt)">Gesamt</th>
+            <th class="text-center" title="Siege im Archiv">Siege</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr class="{% if loop.index==1 %}table-warning{% elif loop.index==2 %}table-secondary{% elif loop.index==3 %}table-light{% endif %}
+                     {% if r.id == session.get('user_id') %}fw-bold{% endif %}">
+            <td class="text-center fw-bold fs-5">
+              {% if loop.index==1 %}🥇{% elif loop.index==2 %}🥈{% elif loop.index==3 %}🥉{% else %}{{ loop.index }}{% endif %}
+            </td>
+            <td>
+              {{ r.display_name or r.username }}
+              {% if r.id == session.get('user_id') %}<span class="badge bg-primary ms-1">Ich</span>{% endif %}
+            </td>
+            <td class="text-center text-muted">{{ r.seasons_played }}</td>
+            {% for s in seasons %}
+            <td class="text-center d-none d-xl-table-cell">
+              {% set sc = detail.get(r.id, {}).get(s.id) %}
+              {% if sc is not none %}
+                <span class="badge {% if sc >= 280 %}bg-success{% elif sc >= 200 %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                  {{ sc }}
+                </span>
+              {% else %}
+                <span class="text-muted">–</span>
+              {% endif %}
+            </td>
+            {% endfor %}
+            <td class="text-center d-none d-md-table-cell text-muted">
+              {{ '%.0f'|format(r.avg_score) }}
+            </td>
+            <td class="text-center d-none d-md-table-cell">
+              <span class="badge bg-success">{{ r.best_score }}</span>
+            </td>
+            <td class="text-center fw-bold fs-4 text-success">{{ r.total_score }}</td>
+            {% set lg = legacy_stats.get(r.id) %}
+            {% if lg %}
+            <td class="text-center d-none d-lg-table-cell border-start">
+              <span class="fw-bold">{{ lg.archiv_rang }}</span>
+              <span class="text-muted" style="font-size:.7rem">/{{ legacy_total }}</span>
+            </td>
+            <td class="text-center d-none d-lg-table-cell text-muted small">{{ lg.n }}</td>
+            <td class="text-center d-none d-lg-table-cell">
+              <span class="badge {% if lg.avg_abw < 40 %}bg-success{% elif lg.avg_abw < 60 %}bg-warning text-dark{% else %}bg-secondary{% endif %}"
+                    title="Normierter Rang-Ø – kleiner ist besser">
+                {{ '%.1f' | format(lg.avg_abw) }}
+              </span>
+            </td>
+            <td class="text-center d-none d-lg-table-cell">
+              {% if lg.siege > 0 %}
+                <span class="fw-bold text-warning">{{ lg.siege }} 🏆</span>
+              {% else %}
+                <span class="text-muted">–</span>
+              {% endif %}
+            </td>
+            {% else %}
+            <td class="text-center d-none d-lg-table-cell border-start text-muted">–</td>
+            <td class="text-center d-none d-lg-table-cell text-muted">–</td>
+            <td class="text-center d-none d-lg-table-cell text-muted">–</td>
+            <td class="text-center d-none d-lg-table-cell text-muted">–</td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Saison-Legende (für kleine Screens) -->
+    {% if seasons|length > 1 %}
+    <div class="p-3 border-top d-xl-none">
+      <p class="small text-muted mb-2"><i class="bi bi-info-circle me-1"></i>Einzelergebnisse (nur auf großen Bildschirmen sichtbar):</p>
+      <div class="table-responsive">
+        <table class="table table-sm table-bordered mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>Spieler</th>
+              {% for s in seasons %}<th class="text-center">{{ s.year }}/{{ s.year+1 - 2000 }}</th>{% endfor %}
+              <th class="text-center">Gesamt</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+            <tr {% if r.id == session.get('user_id') %}class="fw-bold"{% endif %}>
+              <td>{{ r.display_name or r.username }}</td>
+              {% for s in seasons %}
+              <td class="text-center small">{{ detail.get(r.id, {}).get(s.id, '–') }}</td>
+              {% endfor %}
+              <td class="text-center fw-bold">{{ r.total_score }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="text-center p-5 text-muted">
+      <i class="bi bi-stars fs-1"></i>
+      <h5 class="mt-3">Noch keine Daten vorhanden</h5>
+      <p>Die Ewige Tabelle füllt sich, sobald die erste Saison bewertet wurde.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Statistiken -->
+{% if rows %}
+<div class="row g-3 mt-1">
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm text-center p-3">
+      <div class="fs-1">🏆</div>
+      <div class="fw-bold fs-5">{{ rows[0].display_name or rows[0].username }}</div>
+      <div class="text-muted small">Ewiger Tabellenführer</div>
+      <div class="text-success fw-bold fs-4">{{ rows[0].total_score }} Pkt.</div>
+    </div>
+  </div>
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm text-center p-3">
+      <div class="fs-1">⭐</div>
+      {% set best = rows|sort(attribute='best_score', reverse=True)|first %}
+      <div class="fw-bold fs-5">{{ best.display_name or best.username }}</div>
+      <div class="text-muted small">Bester Einzelsaison-Score</div>
+      <div class="text-warning fw-bold fs-4">{{ best.best_score }} Pkt.</div>
+    </div>
+  </div>
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm text-center p-3">
+      <div class="fs-1">📅</div>
+      <div class="fw-bold fs-5">{{ seasons|length }} Saison{{ 'en' if seasons|length != 1 }}</div>
+      <div class="text-muted small">Insgesamt gespielt</div>
+      <div class="text-info fw-bold fs-4">{{ rows|sum(attribute='seasons_played') }} Einzel-Tipps</div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

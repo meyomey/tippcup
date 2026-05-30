@@ -1,0 +1,170 @@
+{% extends "admin/base.html" %}
+{% block title %}Archiv-Import{% endblock %}
+
+{% block admin_content %}
+<h4 class="mb-4"><i class="bi bi-clock-history me-2"></i>Tipp-Archiv – Import & Name-Mapping</h4>
+
+{# Status-Kacheln #}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm text-center">
+      <div class="card-body py-3">
+        <div class="fs-3 fw-bold text-bundesliga">{{ seasons_count }}</div>
+        <div class="text-muted small">Saisons (Abschluss)</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm text-center">
+      <div class="card-body py-3">
+        <div class="fs-3 fw-bold text-bundesliga">{{ count }}</div>
+        <div class="text-muted small">Datensätze gesamt</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm text-center">
+      <div class="card-body py-3">
+        <div class="fs-3 fw-bold text-warning">{{ angst_seasons }}</div>
+        <div class="text-muted small">Saisons (Angsthasen)</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm text-center">
+      <div class="card-body py-3">
+        <div class="fs-3 fw-bold text-warning">{{ angst_count }}</div>
+        <div class="text-muted small">Angsthasen-Einträge</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Angsthasen-Import #}
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-warning text-dark">
+    <i class="bi bi-emoji-dizzy me-2"></i>Angsthasen-CSV importieren
+  </div>
+  <div class="card-body">
+    <p class="text-muted small mb-3">
+      Erwartet: <code>Saison;Rang;Name;Abw_1L;Abw_2L;Abw_Ges;Abw_Gew;n_1L;k_1L;n_2L;k_2L</code>
+    </p>
+    <form method="POST" enctype="multipart/form-data" class="d-flex gap-2 align-items-center flex-wrap">
+      <input type="hidden" name="action" value="import_angsthasen">
+      <input type="file" name="csvfile" accept=".csv" class="form-control form-control-sm" style="max-width:320px" required>
+      <button type="submit" class="btn btn-warning btn-sm">
+        <i class="bi bi-upload me-1"></i>Importieren
+      </button>
+    </form>
+  </div>
+</div>
+
+{# Saison löschen #}
+<div class="card shadow-sm mb-4 border-danger">
+  <div class="card-header bg-danger text-white">
+    <i class="bi bi-trash me-2"></i>Archiv-Saison löschen
+  </div>
+  <div class="card-body">
+    <p class="text-muted small mb-3">Löscht alle Einträge einer bestimmten Saison unwiderruflich.</p>
+    <div class="d-flex flex-wrap gap-2">
+      {% set imported_seasons = [] %}
+      {% for name in all_names %}{% endfor %}
+      {# Saisons aus DB holen – wir nutzen all_names nicht, brauchen distinct seasons #}
+    </div>
+    <form method="POST" class="d-flex gap-2 align-items-center flex-wrap"
+          onsubmit="return confirm('Saison wirklich löschen?')">
+      <input type="hidden" name="action" value="delete_season">
+      <select name="season_name" class="form-select form-select-sm" style="max-width:200px" required>
+        <option value="">– Saison wählen –</option>
+        {% for s in available_seasons %}
+        <option value="{{ s }}">{{ s }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-danger btn-sm">
+        <i class="bi bi-trash me-1"></i>Löschen
+      </button>
+    </form>
+  </div>
+</div>
+
+{# CSV-Upload #}
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-bundesliga text-white">
+    <i class="bi bi-upload me-2"></i>CSV importieren
+  </div>
+  <div class="card-body">
+    <p class="text-muted small mb-3">
+      Erwartet wird die Datei <code>tippcup_alle_saisons.csv</code> mit Semikolon-Trenner und den Spalten:
+      Saison, Spieltag_1L, Spieltag_2L, Rang, Tipper, Abw_1L, Stdabw_1L, MaxAbw_1L, Treffer_1L,
+      Abw_2L, Stdabw_2L, MaxAbw_2L, Treffer_2L, Abw_Ges, Stdabw_Ges, MaxAbw_Ges, Treffer_Ges.
+      Bereits vorhandene Einträge werden aktualisiert (Upsert).
+    </p>
+    <form method="POST" enctype="multipart/form-data" class="d-flex gap-2 align-items-center flex-wrap">
+      <input type="hidden" name="action" value="import_csv">
+      <input type="file" name="csvfile" accept=".csv" class="form-control form-control-sm" style="max-width:320px" required>
+      <button type="submit" class="btn btn-bundesliga btn-sm">
+        <i class="bi bi-upload me-1"></i>Importieren
+      </button>
+    </form>
+  </div>
+</div>
+
+{# Name-Mapping #}
+{% if all_names %}
+<div class="card shadow-sm">
+  <div class="card-header bg-dark text-white">
+    <i class="bi bi-person-gear me-2"></i>Name-Mapping – CSV-Namen → App-Benutzer
+  </div>
+  <div class="card-body p-0">
+    <form method="POST">
+      <input type="hidden" name="action" value="save_map">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>CSV-Name</th>
+              <th>App-Benutzer</th>
+              <th class="text-muted small d-none d-md-table-cell">Hinweis</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for csv_name in all_names %}
+            {% set mapped_uid = name_map.get(csv_name) %}
+            <tr>
+              <td class="fw-semibold">{{ csv_name }}</td>
+              <td>
+                <select name="map_{{ csv_name }}" class="form-select form-select-sm">
+                  <option value="">— kein Account —</option>
+                  {% for u in users %}
+                  <option value="{{ u.id }}" {{ 'selected' if mapped_uid == u.id else '' }}>
+                    {{ u.display_name or u.username }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </td>
+              <td class="text-muted small d-none d-md-table-cell">
+                {% if mapped_uid %}
+                  <span class="text-success"><i class="bi bi-check-circle me-1"></i>verknüpft</span>
+                {% else %}
+                  <span class="text-muted">nicht verknüpft – erscheint grau im Archiv</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="p-3 border-top">
+        <button type="submit" class="btn btn-bundesliga btn-sm">
+          <i class="bi bi-save me-1"></i>Mapping speichern
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% else %}
+<div class="alert alert-info">
+  <i class="bi bi-info-circle me-2"></i>Noch keine CSV-Daten importiert. Bitte zuerst die CSV-Datei hochladen.
+</div>
+{% endif %}
+{% endblock %}

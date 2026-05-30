@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Angsthasen-Karriere – {{ name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+  <a href="{{ url_for('archiv_angsthasen') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  <h4 class="mb-0"><i class="bi bi-emoji-dizzy me-2"></i>{{ name }} – Angsthasen-Karriere</h4>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm text-center h-100">
+      <div class="card-body py-3">
+        <div class="fs-2 fw-bold text-bundesliga">{{ rows|length }}</div>
+        <div class="text-muted small">Saisons</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm text-center h-100">
+      <div class="card-body py-3">
+        <div class="fs-2 fw-bold {{ 'text-success' if wins > 0 else 'text-muted' }}">{{ wins }}{% if wins > 0 %} 😎{% endif %}</div>
+        <div class="text-muted small">Bester Tipper</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm text-center h-100">
+      <div class="card-body py-3">
+        <div class="fs-2 fw-bold text-primary">{{ best.rang if best else '–' }}</div>
+        <div class="text-muted small">Beste Platzierung</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm text-center h-100">
+      <div class="card-body py-3">
+        <div class="fs-2 fw-bold text-warning">{{ '%.1f'|format(avg_abw) if avg_abw else '–' }}</div>
+        <div class="text-muted small">Ø Abw. gesamt</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header bg-bundesliga text-white">
+    <i class="bi bi-table me-2"></i>Alle Saisons
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Saison</th>
+          <th class="text-center">Rang</th>
+          <th class="text-center">Abw. ges.</th>
+          <th class="text-center d-none d-sm-table-cell">Abw. BL1</th>
+          <th class="text-center d-none d-sm-table-cell">Abw. BL2</th>
+          <th class="text-center d-none d-md-table-cell">Abw. gew.</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows | reverse %}
+        <tr class="{{ 'table-success fw-bold' if row.rang == 1 else '' }}">
+          <td><a href="{{ url_for('archiv_angsthasen', season=row.season) }}" class="text-decoration-none">{{ row.season }}</a></td>
+          <td class="text-center">
+            {% if row.rang == 1 %}😎{% else %}{{ row.rang }}{% endif %}
+          </td>
+          <td class="text-center fw-semibold">{{ row.abw_ges }}</td>
+          <td class="text-center d-none d-sm-table-cell text-muted">{{ row.abw_1l }}</td>
+          <td class="text-center d-none d-sm-table-cell text-muted">{{ row.abw_2l }}</td>
+          <td class="text-center d-none d-md-table-cell text-muted">{{ '%.4f'|format(row.abw_gew) if row.abw_gew else '–' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

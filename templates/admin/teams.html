@@ -1,0 +1,168 @@
+{% extends "admin/base.html" %}
+{% block title %}Admin – Teams{% endblock %}
+{% block admin_content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4><i class="bi bi-shield-fill me-2"></i>Teams verwalten</h4>
+  <div class="d-flex gap-2 flex-wrap">
+    <form method="POST" action="{{ url_for('admin_import_both') }}" onsubmit="return confirm('Beide Ligen importieren?\nBL1: {% if "football-data" in api_provider %}football-data.org{% else %}OpenligaDB{% endif %}\nBL2: OpenligaDB')">
+      <button class="btn btn-success btn-sm"><i class="bi bi-cloud-download me-1"></i>Beide Ligen importieren</button>
+    </form>
+    <form method="POST" action="{{ url_for('admin_repair_tips') }}"
+          title="Tipp-Verknüpfungen nach Team-Änderungen reparieren">
+      <button class="btn btn-outline-warning btn-sm">
+        <i class="bi bi-wrench me-1"></i>Tipps reparieren
+      </button>
+    </form>
+  </div>
+</div>
+
+{% if season %}
+<div class="alert alert-info py-2">
+  <i class="bi bi-info-circle me-2"></i>Aktive Saison: <strong>{{ season.name }}</strong> (Jahr {{ season.year }})
+  &nbsp;·&nbsp; BL1: {{ teams.bl1|length }} Teams &nbsp;·&nbsp; BL2: {{ teams.bl2|length }} Teams
+</div>
+{% endif %}
+
+<div class="row g-3">
+  {% for lg_key, lg_name in leagues.items() %}
+  <div class="col-12 col-xl-6">
+    <div class="card shadow-sm">
+      <div class="card-header {% if lg_key=='bl1' %}bg-dark{% else %}bg-secondary{% endif %} text-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-shield-fill me-2"></i>{{ lg_name }} ({{ teams[lg_key]|length }})</span>
+        <div class="d-flex gap-1">
+          <form method="POST" action="{{ url_for('admin_import_teams') }}" class="d-inline" onsubmit="return confirm('{{ lg_name }} importieren?')">
+            <input type="hidden" name="league" value="{{ lg_key }}">
+            <button class="btn btn-sm btn-light" title="Von {% if lg_key == 'bl1' and 'football-data' in api_provider %}football-data.org{% else %}OpenligaDB{% endif %} laden"><i class="bi bi-cloud-download"></i></button>
+          </form>
+          {% if teams[lg_key] %}
+          <form method="POST" action="{{ url_for('admin_import_teams') }}" class="d-inline">
+            <input type="hidden" name="league" value="{{ lg_key }}">
+            <button class="btn btn-sm btn-light" title="Von {% if lg_key == 'bl1' and 'football-data' in api_provider %}football-data.org{% else %}OpenligaDB{% endif %} neu laden (Tipps bleiben erhalten)">
+              <i class="bi bi-arrow-clockwise"></i>
+            </button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Teamliste -->
+      <div class="card-body p-0" style="max-height:320px;overflow-y:auto">
+        {% if teams[lg_key] %}
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-dark sticky-top"><tr><th>#</th><th>Name</th><th class="d-none d-md-table-cell">Kürzel</th><th></th></tr></thead>
+          <tbody>
+            {% for t in teams[lg_key] %}
+            <tr>
+              <td class="text-muted">{{ loop.index }}</td>
+              <td>{% if t.logo_url %}<img src="{{ t.logo_url }}" style="width:16px;height:16px;object-fit:contain" class="me-1">{% endif %}{{ t.name }}</td>
+              <td class="d-none d-md-table-cell text-muted">{{ t.short_name or '–' }}</td>
+              <td>
+                <form method="POST" action="{{ url_for('admin_delete_team', tid=t.id) }}" class="d-inline" onsubmit="return confirm('{{ t.name }} löschen?')">
+                  <button class="btn btn-outline-danger btn-sm py-0 px-1"><i class="bi bi-trash"></i></button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="p-3 text-center text-muted small">
+          <i class="bi bi-exclamation-triangle me-1"></i>Keine Teams vorhanden.
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Einzeln hinzufügen -->
+      <div class="card-footer p-2 border-top">
+        <form method="POST" action="{{ url_for('admin_add_team') }}" class="d-flex gap-2 align-items-center flex-wrap">
+          <input type="hidden" name="league" value="{{ lg_key }}">
+          <input type="text" name="name" class="form-control form-control-sm" placeholder="Teamname"
+                 list="suggestions_{{ lg_key }}" required style="min-width:150px">
+          <input type="text" name="short_name" class="form-control form-control-sm" placeholder="Kürzel" style="max-width:75px">
+          <button type="submit" class="btn btn-bundesliga btn-sm text-nowrap"><i class="bi bi-plus me-1"></i>Hinzufügen</button>
+        </form>
+        <!-- Datalist mit Vorschlägen aus Vorjahren -->
+        <datalist id="suggestions_{{ lg_key }}">
+          {% for s in suggestions[lg_key] %}
+          <option value="{{ s.name }}">{{ s.short_name }}</option>
+          {% endfor %}
+        </datalist>
+      </div>
+    </div>
+
+    <!-- Bulk-Eingabe -->
+    <div class="card shadow-sm mt-2">
+      <div class="card-header py-2 d-flex justify-content-between align-items-center"
+           style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#bulk_{{ lg_key }}">
+        <span class="small fw-semibold"><i class="bi bi-list-ul me-2"></i>Mehrere Teams auf einmal eingeben</span>
+        <i class="bi bi-chevron-down small"></i>
+      </div>
+      <div class="collapse" id="bulk_{{ lg_key }}">
+        <div class="card-body p-2">
+          <p class="small text-muted mb-2">
+            Format: <code>Teamname</code> oder <code>Teamname:Kürzel</code> — ein Team pro Zeile.<br>
+            {% if suggestions[lg_key] %}
+            <span class="text-success"><i class="bi bi-lightbulb me-1"></i>
+            {{ suggestions[lg_key]|length }} Vorschläge aus Vorjahren verfügbar — auf „Vorjahr einfügen" klicken.</span>
+            {% endif %}
+          </p>
+          <form method="POST" action="{{ url_for('admin_manual_bulk_teams') }}">
+            <input type="hidden" name="league" value="{{ lg_key }}">
+            <textarea name="bulk_teams" class="form-control form-control-sm font-monospace mb-2"
+                      rows="10" id="bulk_{{ lg_key }}_ta"
+                      placeholder="Bayern München:FCB&#10;Borussia Dortmund:BVB&#10;RB Leipzig:RBL&#10;..."></textarea>
+            <div class="d-flex gap-2 flex-wrap">
+              <button type="submit" class="btn btn-bundesliga btn-sm">
+                <i class="bi bi-save me-1"></i>Alle eintragen
+              </button>
+              {% if suggestions[lg_key] %}
+              <button type="button" class="btn btn-outline-secondary btn-sm"
+                      onclick="prefillBulk('{{ lg_key }}')">
+                <i class="bi bi-arrow-down-circle me-1"></i>Vorjahr einfügen
+              </button>
+              {% endif %}
+              <button type="button" class="btn btn-outline-secondary btn-sm"
+                      onclick="document.getElementById('bulk_{{ lg_key }}_ta').value=''">
+                <i class="bi bi-x me-1"></i>Leeren
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Auf-/Abstieg Hinweis -->
+<div class="card shadow-sm mt-3 border-warning">
+  <div class="card-header bg-warning text-dark"><i class="bi bi-arrow-up-down me-2"></i>Neue Saison / Auf-Abstieg</div>
+  <div class="card-body">
+    <ol class="ps-3 mb-0 small">
+      <li class="mb-1">Neue Saison unter <strong>Saison</strong> anlegen</li>
+      <li class="mb-1"><strong>Option A:</strong> „Beide Ligen importieren" – BL1 von <strong>{% if "football-data" in api_provider %}football-data.org{% else %}OpenligaDB{% endif %}</strong>, BL2 immer von <strong>OpenligaDB</strong></li>
+      <li class="mb-1"><strong>Option B (offline):</strong> Bulk-Eingabe aufklappen → „Vorjahr einfügen" → Auf-/Absteiger manuell anpassen</li>
+      <li>Tipps werden für die neue Saison neu gesammelt</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+// Vorjahres-Vorschläge für Bulk-Textarea
+const suggestions = {
+  {% for lg_key in leagues.keys() %}
+  '{{ lg_key }}': [
+    {% for s in suggestions[lg_key] %}
+    '{{ s.name }}:{{ s.short_name or s.name[:3] }}',
+    {% endfor %}
+  ],
+  {% endfor %}
+};
+
+function prefillBulk(league) {
+  const ta   = document.getElementById('bulk_' + league + '_ta');
+  const data = suggestions[league] || [];
+  ta.value   = data.join('\n');
+}
+</script>
+{% endblock %}

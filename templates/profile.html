@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+{% block title %}Profil{% endblock %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm">
+      <div class="card-header bg-bundesliga text-white"><i class="bi bi-person-circle me-2"></i>Mein Profil</div>
+      <div class="card-body">
+        <div class="text-center mb-3">
+          <div class="profile-avatar">{{ (user.display_name or user.username)[0].upper() }}</div>
+          <h5 class="mt-2 mb-0">{{ user.display_name or user.username }}</h5>
+          {% if user.full_name %}
+          <div class="text-muted small">{{ user.full_name }}</div>
+          {% endif %}
+          {% if user.favorite_club %}
+          <div class="small mt-1">⚽ {{ user.favorite_club }}</div>
+          {% endif %}
+          {% if user.is_admin %}<br><span class="badge bg-warning text-dark mt-1">Administrator</span>{% endif %}
+        </div>
+        {% if score %}
+        <div class="score-display text-center p-3 rounded mb-3">
+          <div class="score-label">Gesamtscore (max. {{ max_score }})</div>
+          <div class="score-number">{{ score.score }}</div>
+          {% if user_rank %}
+          <div class="mt-1">
+            <span class="badge bg-light text-dark fs-6">
+              {% if user_rank == 1 %}🥇{% elif user_rank == 2 %}🥈{% elif user_rank == 3 %}🥉{% else %}{{ user_rank }}.{% endif %}
+              Platz
+            </span>
+          </div>
+          {% endif %}
+          <div class="score-sub d-flex justify-content-center gap-3 mt-1">
+            <span><strong>BL1:</strong> {{ score.score_bl1 }} <small>(±{{ score.deviation_bl1 }})</small></span>
+            <span><strong>BL2:</strong> {{ score.score_bl2 }} <small>(±{{ score.deviation_bl2 }})</small></span>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Daten ändern -->
+    <div class="card shadow-sm mt-3">
+      <div class="card-header"><i class="bi bi-pencil me-2"></i>Daten ändern</div>
+      <div class="card-body">
+        <form method="POST">
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Spielername <span class="text-muted fw-normal">(Anzeigename)</span></label>
+            <input type="text" name="display_name" class="form-control form-control-sm"
+                   value="{{ user.display_name or '' }}" placeholder="z.B. Heiko">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Voller Name</label>
+            <input type="text" name="full_name" class="form-control form-control-sm"
+                   value="{{ user.full_name or '' }}" placeholder="Vor- und Nachname">
+            <div class="form-text">Wird beim Hover über deinen Spielernamen angezeigt.</div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Lieblingsverein</label>
+            <input type="text" name="favorite_club" class="form-control form-control-sm"
+                   value="{{ user.favorite_club or '' }}" placeholder="z.B. Borussia Dortmund">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">E-Mail-Adresse</label>
+            <input type="email" name="email" class="form-control form-control-sm"
+                   value="{{ user.email or '' }}" placeholder="meine@email.de"></div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Mobilnummer</label>
+            <input type="tel" name="mobile" class="form-control form-control-sm"
+                   value="{{ user.mobile or '' }}" placeholder="+49 170 1234567"></div>
+          <hr class="my-2">
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Neues Passwort</label>
+            <input type="password" name="new_password" class="form-control form-control-sm" placeholder="Leer = nicht ändern"></div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Bestätigen</label>
+            <input type="password" name="confirm_password" class="form-control form-control-sm"></div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold text-danger">Aktuelles Passwort *</label>
+            <input type="password" name="current_password" class="form-control form-control-sm" required></div>
+          <button type="submit" class="btn btn-bundesliga btn-sm w-100">
+            <i class="bi bi-save me-1"></i>Speichern
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Abzeichen -->
+    {% if my_badges %}
+    <div class="card shadow-sm mt-3">
+      <div class="card-header"><i class="bi bi-award me-2"></i>Meine Abzeichen</div>
+      <div class="card-body p-2">
+        <div class="d-flex flex-wrap gap-2">
+          {% for b in my_badges %}
+          <span title="{{ b.get('desc','') }}" style="font-size:1.5rem" data-bs-toggle="tooltip">{{ b.get('emoji','🏅') }}</span>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div><!-- /col -->
+
+  <div class="col-12 col-md-8">
+    {% if preds.bl1 or preds.bl2 %}
+    <!-- Tipp-Übersicht: identisch zu tips_user -->
+    <div class="row g-4 mb-4">
+      {% for lg_key, lg_name in [('bl1','1. Bundesliga'),('bl2','2. Bundesliga')] %}
+      {% if preds[lg_key] %}
+      <div class="col-12 col-xl-6">
+        <div class="card shadow-sm h-100">
+          <div class="card-header {% if lg_key=='bl1' %}bg-dark{% else %}bg-secondary{% endif %} text-white d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-shield-fill me-2"></i>{{ lg_name }}</span>
+            {% if score %}
+            <div class="d-flex gap-2">
+              <span class="badge bg-light text-dark">Score: {{ score['score_' ~ lg_key] }}</span>
+              <span class="badge bg-light text-dark">Abw.: {{ score['deviation_' ~ lg_key] }}</span>
+            </div>
+            {% endif %}
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover mb-0 align-middle">
+                <thead class="table-dark">
+                  <tr>
+                    <th class="text-center sort-col-user" data-key="ist" style="width:40px;cursor:pointer" title="Nach aktuellem Platz sortieren">
+                      Ist <i class="bi bi-arrow-down-up ms-1 opacity-50" style="font-size:.65rem"></i>
+                    </th>
+                    <th>Team</th>
+                    <th class="text-center sort-col-user" data-key="tipp" style="width:50px;cursor:pointer" title="Nach Tipp sortieren">
+                      Tipp <i class="bi bi-arrow-down-up ms-1 opacity-50" style="font-size:.65rem"></i>
+                    </th>
+                    {% if season and season.season_started %}
+                    <th class="text-center sort-col-user" data-key="abw" style="width:55px;cursor:pointer" title="Nach Abweichung sortieren">
+                      Abw. <i class="bi bi-arrow-down-up ms-1 opacity-50" style="font-size:.65rem"></i>
+                    </th>
+                    {% endif %}
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for p in preds[lg_key] %}
+                  {% set diff = (p.predicted_rank - p.current_rank)|abs if p.current_rank else none %}
+                  <tr class="{% if diff is not none and diff == 0 %}table-success{% elif diff is not none and diff <= 2 %}table-warning{% endif %}"
+                      data-ist="{{ p.current_rank or 99 }}"
+                      data-tipp="{{ p.predicted_rank }}"
+                      data-abw="{{ diff if diff is not none else 99 }}">
+                    <td class="text-center fw-bold text-muted">{{ p.current_rank or '–' }}</td>
+                    <td>
+                      {% if p.logo_url %}
+                      <img src="{{ p.logo_url }}" style="width:18px;height:18px;object-fit:contain" class="me-1">
+                      {% endif %}
+                      {{ p.name }}
+                    </td>
+                    <td class="text-center fw-bold">{{ p.predicted_rank }}</td>
+                    {% if season and season.season_started %}
+                    <td class="text-center">
+                      {% if diff is not none %}
+                      <span class="badge {% if diff==0 %}bg-success{% elif diff<=3 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                        {% if diff == 0 %}✓{% else %}±{{ diff }}{% endif %}
+                      </span>
+                      {% else %}–{% endif %}
+                    </td>
+                    {% endif %}
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Statistiken -->
+    {% if score %}
+    <div class="card shadow-sm">
+      <div class="card-header"><i class="bi bi-bar-chart me-2"></i>Statistiken</div>
+      <div class="card-body">
+        <div class="row g-3 text-center">
+          <div class="col-4">
+            <div class="fw-bold fs-4">{{ score.volltreffer or 0 }}</div>
+            <div class="small text-muted">Volltreffer</div>
+          </div>
+          <div class="col-4">
+            <div class="fw-bold fs-4">{{ '%.3f'|format(score.std_deviation or 0) }}</div>
+            <div class="small text-muted">Konsistenz (σ)</div>
+          </div>
+          <div class="col-4">
+            <div class="fw-bold fs-4">{{ score.max_deviation or '–' }}</div>
+            <div class="small text-muted">Max. Abweichung</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+{% if legacy_rows %}
+<div class="card shadow-sm mt-3">
+  <div class="card-header bg-bundesliga text-white d-flex align-items-center justify-content-between">
+    <span><i class="bi bi-clock-history me-2"></i>Historische Karriere</span>
+    <span class="badge bg-light text-dark">{{ legacy_rows|length }} Saisons</span>
+  </div>
+  <div class="card-body py-2">
+    <div class="row g-2 text-center">
+      <div class="col-4">
+        <div class="fw-bold fs-5 {{ 'text-warning' if legacy_wins > 0 else '' }}">
+          {{ legacy_wins }}{% if legacy_wins > 0 %} 🏆{% endif %}
+        </div>
+        <div class="small text-muted">Siege</div>
+      </div>
+      <div class="col-4">
+        <div class="fw-bold fs-5 text-success">{{ legacy_top3 }}</div>
+        <div class="small text-muted">Top-3-Plätze</div>
+      </div>
+      <div class="col-4">
+        <div class="fw-bold fs-5 text-primary">{{ legacy_best if legacy_best else '–' }}</div>
+        <div class="small text-muted">Bester Rang</div>
+      </div>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Saison</th>
+          <th class="text-center">Rang</th>
+          <th class="text-center">Abw. ges.</th>
+          <th class="text-center d-none d-sm-table-cell">🎯</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in legacy_rows | reverse %}
+        <tr class="{{ 'table-warning fw-bold' if row.rang == 1 else '' }}">
+          <td><a href="{{ url_for('archiv', season=row.season) }}" class="text-decoration-none">{{ row.season }}</a></td>
+          <td class="text-center">
+            {% if row.rang == 1 %}🥇{% elif row.rang == 2 %}🥈{% elif row.rang == 3 %}🥉{% else %}{{ row.rang }}{% endif %}
+          </td>
+          <td class="text-center">{{ row.abw_ges | int }}</td>
+          <td class="text-center d-none d-sm-table-cell">{{ row.treffer_ges if row.treffer_ges is not none else '–' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-footer text-end">
+    <a href="{{ url_for('archiv_karriere', tipper_name=(user.display_name or user.username)) }}"
+       class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-person-lines-fill me-1"></i>Vollständige Karriere-Ansicht
+    </a>
+  </div>
+</div>
+{% endif %}
+
+  </div><!-- /col-md-8 -->
+</div><!-- /row -->
+
+{% endblock %}
+{% block scripts %}
+<script>
+// Sortierung (identisch zu tips_user)
+(function() {
+  document.querySelectorAll('.sort-col-user').forEach(function(th) {
+    th.addEventListener('click', function() {
+      var table  = this.closest('table');
+      var tbody  = table.querySelector('tbody');
+      var key    = this.dataset.key;
+      var wasAsc = this.dataset.sortDir === 'asc';
+      var asc    = !wasAsc;
+      table.querySelectorAll('.sort-col-user').forEach(function(h) {
+        delete h.dataset.sortDir;
+        h.querySelector('i').className = 'bi bi-arrow-down-up ms-1 opacity-50';
+        h.style.fontWeight = '';
+      });
+      this.dataset.sortDir = asc ? 'asc' : 'desc';
+      this.querySelector('i').className = 'bi bi-arrow-' + (asc ? 'up' : 'down') + ' ms-1 text-warning';
+      this.style.fontWeight = '700';
+      var rows = Array.from(tbody.querySelectorAll('tr'));
+      rows.sort(function(a, b) {
+        var va = parseFloat(a.dataset[key]) || 99;
+        var vb = parseFloat(b.dataset[key]) || 99;
+        return asc ? va - vb : vb - va;
+      });
+      rows.forEach(function(r) { tbody.appendChild(r); });
+    });
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,140 @@
+{% extends "admin/base.html" %}
+{% block title %}Admin – Sicherheit{% endblock %}
+
+{% block admin_content %}
+<h4 class="mb-4"><i class="bi bi-shield-lock-fill me-2"></i>Sicherheit & Login-Schutz</h4>
+
+<!-- Konfiguration -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card text-center p-3 shadow-sm border-warning">
+      <div class="fs-2 fw-bold text-warning">{{ max_attempts }}</div>
+      <div class="small text-muted">Max. Fehlversuche</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center p-3 shadow-sm border-danger">
+      <div class="fs-2 fw-bold text-danger">{{ lockout_min }} Min.</div>
+      <div class="small text-muted">Sperrzeit</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center p-3 shadow-sm border-{% if locked %}danger{% else %}success{% endif %}">
+      <div class="fs-2 fw-bold {% if locked %}text-danger{% else %}text-success{% endif %}">{{ locked|length }}</div>
+      <div class="small text-muted">Aktuell gesperrte IPs</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center p-3 shadow-sm">
+      <div class="fs-2 fw-bold text-muted">{{ recent|length }}</div>
+      <div class="small text-muted">Fehlversuche (24h)</div>
+    </div>
+  </div>
+</div>
+
+<!-- Gesperrte IPs -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-ban me-2"></i>Aktuell gesperrte IPs</span>
+    {% if locked %}
+    <form method="POST" action="{{ url_for('admin_clear_attempts') }}"
+          onsubmit="return confirm('Alle Login-Versuche löschen?')">
+      <button class="btn btn-sm btn-light">
+        <i class="bi bi-trash me-1"></i>Alle entsperren
+      </button>
+    </form>
+    {% endif %}
+  </div>
+  <div class="card-body {% if not locked %}p-3{% else %}p-0{% endif %}">
+    {% if locked %}
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead class="table-dark">
+          <tr>
+            <th>IP-Adresse</th>
+            <th class="text-center">Fehlversuche</th>
+            <th class="d-none d-md-table-cell">Benutzernamen versucht</th>
+            <th class="d-none d-sm-table-cell">Letzter Versuch</th>
+            <th class="text-center">Aktion</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in locked %}
+          <tr class="table-danger">
+            <td class="fw-bold font-monospace">{{ row.ip }}</td>
+            <td class="text-center">
+              <span class="badge bg-danger">{{ row.attempts }}×</span>
+            </td>
+            <td class="d-none d-md-table-cell text-muted small">{{ row.usernames }}</td>
+            <td class="d-none d-sm-table-cell text-muted small">
+              {{ row.last_attempt[:16].replace('T',' ') }} Uhr
+            </td>
+            <td class="text-center">
+              <form method="POST" action="{{ url_for('admin_unblock') }}" class="d-inline">
+                <input type="hidden" name="ip" value="{{ row.ip }}">
+                <button class="btn btn-sm btn-outline-success">
+                  <i class="bi bi-unlock me-1"></i>Entsperren
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center text-muted py-2">
+      <i class="bi bi-check-circle-fill text-success me-2"></i>
+      Keine IPs aktuell gesperrt.
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Letzte Fehlversuche -->
+<div class="card shadow-sm">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-clock-history me-2"></i>Fehlversuche der letzten 24 Stunden</span>
+    <span class="badge bg-secondary">{{ recent|length }} Einträge</span>
+  </div>
+  <div class="card-body p-0">
+    {% if recent %}
+    <div class="table-responsive" style="max-height:400px;overflow-y:auto">
+      <table class="table table-sm table-hover mb-0">
+        <thead class="table-dark sticky-top">
+          <tr>
+            <th>Zeitpunkt</th>
+            <th>IP-Adresse</th>
+            <th>Benutzername versucht</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in recent %}
+          <tr>
+            <td class="text-muted small">{{ r.created_at[:16].replace('T',' ') }} Uhr</td>
+            <td class="font-monospace small">{{ r.ip }}</td>
+            <td class="small">{{ r.username }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center p-4 text-muted">
+      <i class="bi bi-shield-check fs-2"></i>
+      <p class="mt-2 mb-0">Keine Fehlversuche in den letzten 24 Stunden.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Hinweis -->
+<div class="card shadow-sm mt-3 border-info">
+  <div class="card-body py-2 small text-muted">
+    <i class="bi bi-info-circle me-2 text-info"></i>
+    Nach <strong>{{ max_attempts }} Fehlversuchen</strong> wird eine IP für
+    <strong>{{ lockout_min }} Minuten</strong> gesperrt. Der Countdown läuft auf der
+    Login-Seite sichtbar ab. Admins können IPs hier manuell entsperren.
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,163 @@
+{% extends "admin/base.html" %}
+{% block title %}Admin – Manuelle Tabelleneingabe{% endblock %}
+
+{% block admin_content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4><i class="bi bi-table me-2"></i>Manuelle Tabelleneingabe</h4>
+  <span class="badge bg-warning text-dark fs-6">Nur nötig wenn API nicht erreichbar ({{ 'football-data.org / OpenligaDB' if 'football-data' in api_provider else 'OpenligaDB' }})</span>
+</div>
+
+{% if season %}
+<div class="alert alert-info py-2 mb-3">
+  <i class="bi bi-info-circle me-2"></i>
+  Aktive Saison: <strong>{{ season.name }}</strong> &nbsp;·&nbsp;
+  Trage hier die aktuellen Tabellenplätze manuell ein.
+  Pflichtfeld ist nur der Tabellenplatz – alle anderen Felder sind optional.
+</div>
+
+<!-- Liga-Auswahl -->
+<div class="d-flex gap-2 mb-3">
+  {% for lg_key, lg_name in leagues.items() %}
+  <a href="{{ url_for('admin_manual_standings', league=lg_key) }}"
+     class="btn {% if league == lg_key %}btn-bundesliga{% else %}btn-outline-secondary{% endif %}">
+    <i class="bi bi-shield-fill me-1"></i>{{ lg_name }}
+  </a>
+  {% endfor %}
+</div>
+
+{% if teams %}
+<div class="card shadow-sm">
+  <div class="card-header {% if league=='bl1' %}bg-dark{% else %}bg-secondary{% endif %} text-white">
+    <i class="bi bi-pencil-square me-2"></i>{{ leagues[league] }} – {{ teams|length }} Teams
+  </div>
+  <form method="POST">
+    <input type="hidden" name="league" value="{{ league }}">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead class="table-dark sticky-top">
+          <tr>
+            <th style="min-width:160px">Team</th>
+            <th class="text-center" style="width:70px">
+              Platz *<br><small class="fw-normal text-white-50">1–18</small>
+            </th>
+            <th class="text-center d-none d-md-table-cell" style="width:65px">
+              Punkte<br><small class="fw-normal text-white-50">opt.</small>
+            </th>
+            <th class="text-center d-none d-lg-table-cell" style="width:55px">
+              Spiele<br><small class="fw-normal text-white-50">opt.</small>
+            </th>
+            <th class="text-center d-none d-lg-table-cell" style="width:50px">
+              S<br><small class="fw-normal text-white-50">opt.</small>
+            </th>
+            <th class="text-center d-none d-lg-table-cell" style="width:50px">
+              U<br><small class="fw-normal text-white-50">opt.</small>
+            </th>
+            <th class="text-center d-none d-lg-table-cell" style="width:50px">
+              N<br><small class="fw-normal text-white-50">opt.</small>
+            </th>
+            <th class="text-center d-none d-xl-table-cell" style="width:65px">
+              Tore+<br><small class="fw-normal text-white-50">opt.</small>
+            </th>
+            <th class="text-center d-none d-xl-table-cell" style="width:65px">
+              Tore-<br><small class="fw-normal text-white-50">opt.</small>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for team in teams %}
+          {% set ex = existing.get(team.id) %}
+          <tr>
+            <td>
+              {% if team.logo_url %}
+              <img src="{{ team.logo_url }}" style="width:18px;height:18px;object-fit:contain" class="me-1">
+              {% endif %}
+              <span class="fw-semibold">{{ team.name }}</span>
+            </td>
+            <td>
+              <input type="number" name="rank_{{ team.id }}"
+                     value="{{ ex.current_rank if ex else '' }}"
+                     class="form-control form-control-sm text-center fw-bold"
+                     min="1" max="{{ teams|length }}" required
+                     style="width:60px">
+            </td>
+            <td class="d-none d-md-table-cell">
+              <input type="number" name="pts_{{ team.id }}"
+                     value="{{ ex.points if ex else '' }}"
+                     class="form-control form-control-sm text-center"
+                     min="0" style="width:60px">
+            </td>
+            <td class="d-none d-lg-table-cell">
+              <input type="number" name="sp_{{ team.id }}"
+                     value="{{ ex.matches_played if ex else '' }}"
+                     class="form-control form-control-sm text-center"
+                     min="0" style="width:50px">
+            </td>
+            <td class="d-none d-lg-table-cell">
+              <input type="number" name="w_{{ team.id }}"
+                     value="{{ ex.wins if ex else '' }}"
+                     class="form-control form-control-sm text-center"
+                     min="0" style="width:50px">
+            </td>
+            <td class="d-none d-lg-table-cell">
+              <input type="number" name="d_{{ team.id }}"
+                     value="{{ ex.draws if ex else '' }}"
+                     class="form-control form-control-sm text-center"
+                     min="0" style="width:50px">
+            </td>
+            <td class="d-none d-lg-table-cell">
+              <input type="number" name="l_{{ team.id }}"
+                     value="{{ ex.losses if ex else '' }}"
+                     class="form-control form-control-sm text-center"
+                     min="0" style="width:50px">
+            </td>
+            <td class="d-none d-xl-table-cell">
+              <input type="number" name="gf_{{ team.id }}"
+                     value="{{ ex.goals_for if ex else '' }}"
+                     class="form-control form-control-sm text-center"
+                     min="0" style="width:60px">
+            </td>
+            <td class="d-none d-xl-table-cell">
+              <input type="number" name="ga_{{ team.id }}"
+                     value="{{ ex.goals_against if ex else '' }}"
+                     class="form-control form-control-sm text-center"
+                     min="0" style="width:60px">
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-footer d-flex gap-2 align-items-center flex-wrap">
+      <button type="submit" class="btn btn-bundesliga">
+        <i class="bi bi-save me-1"></i>Speichern &amp; Punkte berechnen
+      </button>
+      <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary">Abbrechen</a>
+      <small class="text-muted ms-auto">* Nur Tabellenplatz ist Pflicht</small>
+    </div>
+  </form>
+</div>
+
+<div class="card shadow-sm mt-3 border-info">
+  <div class="card-body py-2">
+    <p class="mb-1 small"><i class="bi bi-lightbulb me-2 text-info"></i><strong>Tipp:</strong>
+      Du kannst auch nur den Tabellenplatz eintragen – alle anderen Felder (Punkte, Tore etc.)
+      werden nur für die Anzeige der Tabelle benötigt, nicht für die Punkteberechnung.
+    </p>
+    <p class="mb-0 small text-muted">
+      Sobald OpenligaDB wieder erreichbar ist, kannst du unter <strong>Saison → Tabelle aktualisieren</strong>
+      die Daten überschreiben lassen.
+    </p>
+  </div>
+</div>
+
+{% else %}
+<div class="alert alert-warning">
+  <i class="bi bi-exclamation-triangle me-2"></i>
+  Keine Teams für {{ leagues[league] }} hinterlegt.
+  Bitte zuerst unter <a href="{{ url_for('admin_teams') }}">Teams</a> importieren oder manuell anlegen.
+</div>
+{% endif %}
+{% else %}
+<div class="alert alert-danger">Keine aktive Saison gefunden.</div>
+{% endif %}
+{% endblock %}

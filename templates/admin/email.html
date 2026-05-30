@@ -1,0 +1,228 @@
+{% extends "admin/base.html" %}
+{% block title %}Admin – E-Mail{% endblock %}
+
+{% block admin_content %}
+<h4 class="mb-4"><i class="bi bi-envelope-fill me-2"></i>E-Mail & Rundbrief</h4>
+
+<div class="row g-4">
+
+  <!-- Linke Spalte: SMTP + Rundbrief -->
+  <div class="col-12 col-lg-7">
+
+    <!-- Rundbrief senden -->
+    <div class="card shadow-sm mb-4">
+      <div class="card-header bg-bundesliga text-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-send-fill me-2"></i>Rundbrief senden</span>
+        <span class="badge bg-light text-dark">
+          {{ with_email }}/{{ total_users }} mit E-Mail-Adresse
+        </span>
+      </div>
+      <div class="card-body">
+        {% if with_email == 0 %}
+        <div class="alert alert-warning">
+          <i class="bi bi-exclamation-triangle me-2"></i>
+          Noch keine E-Mail-Adressen hinterlegt. Bitte unter
+          <a href="{{ url_for('admin_users') }}">Benutzer</a> eintragen.
+        </div>
+        {% else %}
+        <form method="POST">
+          <input type="hidden" name="action" value="send_all">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Empfänger</label>
+            <select name="filter" class="form-select">
+              <option value="all">Alle Benutzer mit E-Mail ({{ with_email }})</option>
+              {% if season %}
+              <option value="no_tip">Noch keinen Tipp abgegeben</option>
+              <option value="incomplete">Tipp unvollständig</option>
+              {% endif %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Betreff *</label>
+            <input type="text" name="subject" class="form-control" required
+                   placeholder="z.B. Tippspiel {{ season.name if season }} – Tipp jetzt abgeben!">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Nachricht *</label>
+            <textarea name="body" class="form-control" rows="8" required
+                      placeholder="Hallo zusammen,&#10;&#10;der Tippschluss naht! Gebt noch schnell euren Tipp ab.&#10;&#10;Viel Erfolg!"></textarea>
+            <div class="form-text">Einfacher Text. Jede Zeile wird als eigener Absatz gesendet.</div>
+          </div>
+          <button type="submit" class="btn btn-bundesliga"
+                  onclick="return confirm('E-Mail wirklich an alle senden?')">
+            <i class="bi bi-send me-1"></i>Rundbrief senden
+          </button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- SMTP-Konfiguration (einklappbar) -->
+    <div class="card shadow-sm">
+      <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center"
+           style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#smtpCollapse"
+           aria-expanded="{{ 'false' if cfg and cfg.host else 'true' }}"
+           aria-controls="smtpCollapse">
+        <span><i class="bi bi-gear-fill me-2"></i>SMTP-Einstellungen</span>
+        <div class="d-flex align-items-center gap-2">
+          {% if cfg and cfg.host %}
+          <span class="badge bg-success">✓ Konfiguriert</span>
+          {% else %}
+          <span class="badge bg-danger">Nicht konfiguriert</span>
+          {% endif %}
+          <i class="bi bi-chevron-down" id="smtpChevron" style="transition:transform .2s"></i>
+        </div>
+      </div>
+      <div class="collapse {% if not cfg or not cfg.host %}show{% endif %}" id="smtpCollapse">
+        <div class="card-body">
+          <div class="alert alert-secondary py-2 small mb-3">
+            <i class="bi bi-info-circle me-1"></i>
+            Für <strong>Gmail</strong>: Host <code>smtp.gmail.com</code>, Port <code>587</code>, App-Passwort verwenden.<br>
+            Für <strong>GMX/Web.de</strong>: Host <code>mail.gmx.net</code> bzw. <code>smtp.web.de</code>, Port <code>587</code>.<br>
+            Für <strong>Netcup / eigenen Server</strong>: Zugangsdaten aus dem Mail-Paket.
+          </div>
+          <form method="POST">
+            <input type="hidden" name="action" value="save_smtp">
+            <div class="row g-3">
+              <div class="col-8">
+                <label class="form-label small fw-semibold">SMTP-Host</label>
+                <input type="text" name="host" class="form-control form-control-sm"
+                       value="{{ cfg.host if cfg else '' }}" placeholder="smtp.gmail.com">
+              </div>
+              <div class="col-4">
+                <label class="form-label small fw-semibold">Port</label>
+                <input type="number" name="port" class="form-control form-control-sm"
+                       value="{{ cfg.port if cfg else 587 }}">
+              </div>
+              <div class="col-12 col-sm-6">
+                <label class="form-label small fw-semibold">Benutzername</label>
+                <input type="text" name="username" class="form-control form-control-sm"
+                       value="{{ cfg.username if cfg else '' }}" placeholder="deine@email.de">
+              </div>
+              <div class="col-12 col-sm-6">
+                <label class="form-label small fw-semibold">Passwort</label>
+                <input type="password" name="password" class="form-control form-control-sm"
+                       value="{{ cfg.password if cfg else '' }}" placeholder="••••••••">
+              </div>
+              <div class="col-12 col-sm-6">
+                <label class="form-label small fw-semibold">Absender-Name</label>
+                <input type="text" name="sender_name" class="form-control form-control-sm"
+                       value="{{ cfg.sender_name if cfg else 'Tippcup Bundesliga' }}">
+              </div>
+              <div class="col-12 col-sm-6">
+                <label class="form-label small fw-semibold">Absender-E-Mail</label>
+                <input type="email" name="sender_email" class="form-control form-control-sm"
+                       value="{{ cfg.sender_email if cfg else '' }}" placeholder="tippspiel@meinedomain.de">
+              </div>
+              <div class="col-12">
+                <div class="form-check">
+                  <input type="checkbox" name="use_tls" class="form-check-input" id="useTls"
+                         {% if not cfg or cfg.use_tls %}checked{% endif %}>
+                  <label class="form-check-label small" for="useTls">STARTTLS verwenden (empfohlen, Port 587)</label>
+                </div>
+              </div>
+            </div>
+            <div class="d-flex gap-2 mt-3 flex-wrap">
+              <button type="submit" class="btn btn-bundesliga btn-sm">
+                <i class="bi bi-save me-1"></i>Speichern
+              </button>
+            </div>
+          </form>
+          <!-- Test-E-Mail -->
+          <hr>
+          <form method="POST" class="d-flex gap-2 align-items-end flex-wrap">
+            <input type="hidden" name="action" value="test_smtp">
+            <div class="flex-grow-1">
+              <label class="form-label small fw-semibold">Test-E-Mail senden</label>
+              <input type="email" name="test_email" class="form-control form-control-sm"
+                     placeholder="test@beispiel.de" required>
+            </div>
+            <button type="submit" class="btn btn-outline-info btn-sm">
+              <i class="bi bi-send me-1"></i>Testen
+            </button>
+          </form>
+        </div><!-- card-body -->
+      </div><!-- collapse -->
+    </div><!-- card -->
+  </div>
+
+  <!-- Rechte Spalte: Benutzerübersicht -->
+  <div class="col-12 col-lg-5">
+    <div class="card shadow-sm">
+      <div class="card-header"><i class="bi bi-people-fill me-2"></i>E-Mail-Adressen</div>
+      <div class="card-body p-0" style="max-height:520px;overflow-y:auto">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-dark sticky-top">
+            <tr>
+              <th>Benutzer</th>
+              <th>E-Mail</th>
+              <th class="text-center"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in users_list %}
+            <tr>
+              <td>
+                {{ u.display_name or u.username }}
+                {% if u.is_admin %}<span class="badge bg-warning text-dark ms-1" style="font-size:.6rem">Admin</span>{% endif %}
+              </td>
+              <td>
+                {% if u.email %}
+                  <a href="mailto:{{ u.email }}" class="small text-muted text-break">{{ u.email }}</a>
+                {% else %}
+                  <span class="text-danger small"><i class="bi bi-x-circle me-1"></i>Fehlt</span>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                <a href="{{ url_for('admin_edit_user', uid=u.id) }}"
+                   class="btn btn-xs btn-outline-secondary btn-sm py-0 px-1">
+                  <i class="bi bi-pencil"></i>
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer py-2 d-flex justify-content-between">
+        <small class="text-muted">
+          <i class="bi bi-check-circle text-success me-1"></i>{{ with_email }} mit E-Mail
+        </small>
+        <small class="text-muted">
+          <i class="bi bi-x-circle text-danger me-1"></i>{{ without_email }} ohne E-Mail
+        </small>
+      </div>
+    </div>
+
+    {% if without_email > 0 %}
+    <div class="alert alert-warning mt-3 py-2 small">
+      <i class="bi bi-exclamation-triangle me-2"></i>
+      <strong>{{ without_email }} Benutzer</strong> haben noch keine E-Mail-Adresse.
+      Diese können keine Rundbriefe empfangen.<br>
+      <a href="{{ url_for('admin_users') }}" class="alert-link">Jetzt eintragen →</a>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Chevron drehen beim Ein-/Ausklappen
+const smtpEl = document.getElementById('smtpCollapse');
+const chevron = document.getElementById('smtpChevron');
+if (smtpEl && chevron) {
+  smtpEl.addEventListener('show.bs.collapse', () => {
+    chevron.style.transform = 'rotate(180deg)';
+  });
+  smtpEl.addEventListener('hide.bs.collapse', () => {
+    chevron.style.transform = 'rotate(0deg)';
+  });
+  // Initial-Zustand
+  if (smtpEl.classList.contains('show')) {
+    chevron.style.transform = 'rotate(180deg)';
+  }
+}
+</script>
+{% endblock %}

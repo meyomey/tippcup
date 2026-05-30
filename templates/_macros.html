@@ -1,0 +1,9 @@
+{% macro player_tooltip(display_name, full_name='', favorite_club='', username='') %}
+{%- set parts = [] %}
+{%- if full_name %}{% set parts = parts + [full_name] %}{% endif %}
+{%- if favorite_club %}{% set parts = parts + ['⚽ ' + favorite_club] %}{% endif %}
+{%- set tooltip = parts | join(' · ') %}
+{%- if tooltip %}<span class="tippcup-tooltip" data-tooltip="{{ tooltip }}">{{ display_name or username }}</span>
+{%- else %}{{ display_name or username }}
+{%- endif %}
+{% endmacro %}

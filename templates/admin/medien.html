@@ -1,0 +1,625 @@
+{% extends "admin/base.html" %}
+{% block title %}Admin – Medien & Links{% endblock %}
+
+{% block admin_content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="mb-0"><i class="bi bi-images me-2"></i>Medien & Links</h4>
+  <a href="{{ url_for('medien') }}" class="btn btn-sm btn-outline-success">
+    <i class="bi bi-eye me-1"></i>Ansicht
+  </a>
+</div>
+
+<!-- Externe Links als eigener Tab -->
+<ul class="nav nav-tabs mb-3" id="mediaTabs">
+  <li class="nav-item">
+    <a class="nav-link active" data-bs-toggle="tab" href="#tabMedien">
+      <i class="bi bi-images me-1"></i>Dateien & Ordner
+      <span class="badge bg-secondary ms-1">{{ all_files|length }}</span>
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" data-bs-toggle="tab" href="#tabLinks">
+      <i class="bi bi-link-45deg me-1"></i>Externe Links
+      <span class="badge bg-secondary ms-1">{{ links|length }}</span>
+    </a>
+  </li>
+</ul>
+
+<div class="tab-content">
+
+<!-- ══ DATEIEN & ORDNER ══════════════════════════════════ -->
+<div class="tab-pane fade show active" id="tabMedien">
+<div class="row g-3">
+
+  <!-- Linke Spalte: Ordner-Navigation -->
+  <div class="col-12 col-lg-3">
+
+    <!-- Upload -->
+    <div class="card shadow-sm mb-3">
+      <div class="card-header bg-bundesliga text-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-cloud-upload me-1"></i>Hochladen</span>
+        <button class="btn btn-sm btn-light py-0" type="button"
+                data-bs-toggle="collapse" data-bs-target="#uploadForm">
+          <i class="bi bi-chevron-down"></i>
+        </button>
+      </div>
+      <div class="collapse show" id="uploadForm">
+        <div class="card-body p-2">
+          <form method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="upload">
+            <div class="mb-2">
+              <select name="folder_id" class="form-select form-select-sm" id="uploadFolderSel">
+                <option value="">— Kein Ordner —</option>
+                {% for f in folders %}
+                <option value="{{ f.id }}">{{ f.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <input type="file" name="files" class="form-control form-control-sm mb-2"
+                   multiple accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.zip,.mp3,.ogg,.wav,.m4a,.aac,.flac"
+                   id="fileInput" onchange="updateFileLabel(this)">
+            <!-- Drop-Zone -->
+            <div id="uploadDropZone"
+                 class="border rounded text-center p-2 mb-2 text-muted"
+                 style="border-style:dashed!important;cursor:pointer;transition:background .2s;font-size:.75rem">
+              <i class="bi bi-cloud-upload"></i> Dateien hierher ziehen oder <kbd>Strg+V</kbd>
+            </div>
+            <div class="text-muted mb-2" style="font-size:.72rem" id="fileLabel">
+              Bilder, Videos, Audio, ZIP, Docs · Strg+V zum Einfügen
+            </div>
+            <div class="form-check mb-2">
+              <input type="checkbox" name="overwrite" value="1" class="form-check-input" id="overwriteCheck">
+              <label class="form-check-label small" for="overwriteCheck">Duplikate überschreiben</label>
+            </div>
+            <button type="submit" class="btn btn-bundesliga btn-sm w-100">
+              <i class="bi bi-upload me-1"></i>Hochladen
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ordner-Liste -->
+    <div class="card shadow-sm">
+      <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-folder me-1"></i>Ordner</span>
+        <button class="btn btn-sm btn-outline-light py-0" data-bs-toggle="collapse"
+                data-bs-target="#newFolderForm" title="Neuer Ordner">
+          <i class="bi bi-plus"></i>
+        </button>
+      </div>
+      <!-- Neuer Ordner -->
+      <div class="collapse" id="newFolderForm">
+        <div class="p-2 border-bottom">
+          <form method="POST">
+            <input type="hidden" name="action" value="add_folder">
+            <input type="text" name="name" class="form-control form-control-sm mb-1"
+                   placeholder="Name" required>
+            <input type="text" name="description" class="form-control form-control-sm mb-2"
+                   placeholder="Beschreibung (optional)">
+            <button type="submit" class="btn btn-bundesliga btn-sm w-100">
+              <i class="bi bi-folder-plus me-1"></i>Erstellen
+            </button>
+          </form>
+        </div>
+      </div>
+      <!-- Ordner-Einträge -->
+      <div class="list-group list-group-flush" id="folderList">
+        <!-- "Alle Dateien" -->
+        <div class="list-group-item list-group-item-action py-2 active folder-nav-item"
+             id="nav-all" onclick="showAll()" style="cursor:pointer">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-files text-muted"></i>
+            <span class="small fw-semibold flex-grow-1">Alle Dateien</span>
+            <span class="badge bg-secondary">{{ all_files|length }}</span>
+          </div>
+        </div>
+        <!-- Ungrouped -->
+        {% set unassigned_count = all_files | selectattr('folder_id', 'none') | list | length %}
+        {% if unassigned_count > 0 %}
+        <div class="list-group-item list-group-item-action py-2 folder-nav-item"
+             id="nav-none" onclick="showFolder(null,'— Kein Ordner —')" style="cursor:pointer">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-folder2 text-muted"></i>
+            <span class="small flex-grow-1 text-muted fst-italic">Kein Ordner</span>
+            <span class="badge bg-secondary">{{ unassigned_count }}</span>
+          </div>
+        </div>
+        {% endif %}
+        {% for folder in folders %}
+        {% set fcnt = all_files | selectattr('folder_id', 'equalto', folder.id) | list | length %}
+        <div class="list-group-item list-group-item-action py-2 folder-nav-item"
+             id="nav-{{ folder.id }}"
+             onclick="showFolder({{ folder.id }},'{{ folder.name|e }}')"
+             style="cursor:pointer"
+             data-folder-id="{{ folder.id }}"
+             ondragover="navDragOver(event,this)"
+             ondragleave="navDragLeave(this)"
+             ondrop="navDrop(event,{{ folder.id }},this)">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-folder-fill text-warning"></i>
+            <span class="small fw-semibold flex-grow-1">{{ folder.name }}</span>
+            <span class="badge bg-secondary" id="cnt-{{ folder.id }}">{{ fcnt }}</span>
+            <button class="btn btn-link btn-sm p-0 text-danger"
+                    onclick="event.stopPropagation();deleteFolder({{ folder.id }},'{{ folder.name|e }}')"
+                    title="Löschen">
+              <i class="bi bi-trash" style="font-size:.7rem"></i>
+            </button>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div><!-- /col-lg-3 -->
+
+  <!-- Rechte Spalte: Dateiinhalt -->
+  <div class="col-12 col-lg-9">
+
+    <!-- Bulk-Aktionen -->
+    <div id="bulkBar" class="d-none mb-2">
+      <div class="d-flex gap-2 align-items-center p-2 rounded bg-warning bg-opacity-25 border border-warning">
+        <span class="small fw-semibold"><span id="selCount">0</span> ausgewählt</span>
+        <div class="ms-auto d-flex gap-2 flex-wrap">
+          <select id="bulkMoveFolder" class="form-select form-select-sm" style="max-width:180px">
+            <option value="">— Ordner wählen —</option>
+            {% for f in folders %}
+            <option value="{{ f.id }}">{{ f.name }}</option>
+            {% endfor %}
+          </select>
+          <button class="btn btn-sm btn-warning" onclick="bulkMove()">
+            <i class="bi bi-arrow-right-square me-1"></i>Verschieben
+          </button>
+          <button class="btn btn-sm btn-danger" onclick="bulkDelete()">
+            <i class="bi bi-trash me-1"></i>Löschen
+          </button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="clearSel()">
+            <i class="bi bi-x"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Datei-Grid -->
+    <div class="card shadow-sm">
+      <div class="card-header d-flex align-items-center gap-2" id="contentHeader">
+        <input type="checkbox" class="form-check-input" id="checkAll" onchange="toggleAll(this)">
+        <span class="fw-semibold" id="contentTitle">Alle Dateien</span>
+        <span class="badge bg-secondary ms-1" id="contentCount">{{ all_files|length }}</span>
+        <span class="badge bg-dark ms-auto" id="totalSize">
+          {% if total_size >= 1048576 %}{{ '%.1f'|format(total_size/1048576) }} MB
+          {% else %}{{ '%.0f'|format(total_size/1024) }} KB{% endif %}
+        </span>
+      </div>
+      <div id="fileGrid" style="max-height:70vh;overflow-y:auto">
+        <!-- Wird per JS befüllt -->
+      </div>
+    </div>
+
+  </div><!-- /col-lg-9 -->
+</div><!-- /row -->
+</div><!-- /tab-pane Medien -->
+
+<!-- ══ EXTERNE LINKS ════════════════════════════════════ -->
+<div class="tab-pane fade" id="tabLinks">
+  <div class="row g-4">
+    <div class="col-12 col-lg-5">
+      <div class="card shadow-sm">
+        <div class="card-header bg-dark text-white"><i class="bi bi-plus-circle me-2"></i>Link hinzufügen</div>
+        <div class="card-body">
+          <form method="POST">
+            <input type="hidden" name="action" value="add_link">
+            <div class="mb-2"><label class="form-label small fw-semibold">Titel *</label>
+              <input type="text" name="title" class="form-control form-control-sm" required></div>
+            <div class="mb-2"><label class="form-label small fw-semibold">URL *</label>
+              <input type="url" name="url" class="form-control form-control-sm" required></div>
+            <div class="mb-2"><label class="form-label small fw-semibold">Beschreibung</label>
+              <input type="text" name="description" class="form-control form-control-sm"></div>
+            <div class="mb-3"><label class="form-label small fw-semibold">Icon</label>
+              <select name="icon" class="form-select form-select-sm">
+                <option value="bi-link-45deg">🔗 Link</option>
+                <option value="bi-cloud-fill">☁️ Cloud</option>
+                <option value="bi-images">🖼️ Fotos</option>
+                <option value="bi-file-earmark-pdf">📄 PDF</option>
+                <option value="bi-folder2-open">📁 Ordner</option>
+                <option value="bi-camera-fill">📷 Kamera</option>
+                <option value="bi-youtube">▶️ YouTube</option>
+                <option value="bi-globe">🌐 Webseite</option>
+                <option value="bi-trophy-fill">🏆 Trophäe</option>
+              </select>
+            </div>
+            <button type="submit" class="btn btn-bundesliga btn-sm w-100">
+              <i class="bi bi-plus me-1"></i>Hinzufügen
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-7">
+      <div class="card shadow-sm">
+        <div class="card-header bg-dark text-white">
+          <i class="bi bi-list-ul me-2"></i>Links <span class="badge bg-secondary ms-1">{{ links|length }}</span>
+        </div>
+        {% if links %}
+        <div class="list-group list-group-flush">
+          {% for lnk in links %}
+          <div class="list-group-item py-2">
+            <div class="d-flex align-items-center gap-2">
+              <i class="bi {{ lnk.icon }} fs-4 text-primary"></i>
+              <div class="flex-grow-1 min-width-0">
+                <div class="fw-semibold">{{ lnk.title }}
+                  {% if not lnk.is_active %}<span class="badge bg-secondary ms-1 small">Inaktiv</span>{% endif %}
+                </div>
+                {% if lnk.description %}<div class="text-muted small">{{ lnk.description }}</div>{% endif %}
+                <div class="text-muted small text-truncate"><a href="{{ lnk.url }}" target="_blank" class="text-muted">{{ lnk.url }}</a></div>
+              </div>
+              <div class="d-flex gap-1 flex-shrink-0">
+                <button class="btn btn-sm btn-outline-secondary py-0 px-1"
+                        onclick="editLink({{ lnk.id }},'{{ lnk.title|e }}','{{ lnk.url|e }}','{{ lnk.description|e }}','{{ lnk.icon }}',{{ lnk.is_active }})">
+                  <i class="bi bi-pencil" style="font-size:.75rem"></i>
+                </button>
+                <form method="POST" onsubmit="return confirm('Link löschen?')">
+                  <input type="hidden" name="action" value="delete_link">
+                  <input type="hidden" name="link_id" value="{{ lnk.id }}">
+                  <button class="btn btn-sm btn-outline-danger py-0 px-1">
+                    <i class="bi bi-trash" style="font-size:.75rem"></i>
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="card-body text-center py-4 text-muted small">Noch keine Links</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>{# end tab-content #}
+
+<!-- Ordner löschen -->
+<form method="POST" id="deleteFolderForm">
+  <input type="hidden" name="action" value="delete_folder">
+  <input type="hidden" name="folder_id" id="deleteFolderID">
+</form>
+
+<!-- Link bearbeiten Modal -->
+<div class="modal fade" id="editLinkModal" tabindex="-1">
+  <div class="modal-dialog"><div class="modal-content">
+    <form method="POST">
+      <input type="hidden" name="action" value="edit_link">
+      <input type="hidden" name="link_id" id="editLinkId">
+      <div class="modal-header"><h5 class="modal-title">Link bearbeiten</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="mb-2"><input type="text" name="title" id="editLinkTitle" class="form-control" required></div>
+        <div class="mb-2"><input type="url" name="url" id="editLinkUrl" class="form-control" required></div>
+        <div class="mb-2"><input type="text" name="description" id="editLinkDesc" class="form-control"></div>
+        <div class="mb-2"><select name="icon" id="editLinkIcon" class="form-select">
+          <option value="bi-link-45deg">🔗 Link</option><option value="bi-cloud-fill">☁️ Cloud</option>
+          <option value="bi-images">🖼️ Fotos</option><option value="bi-file-earmark-pdf">📄 PDF</option>
+          <option value="bi-folder2-open">📁 Ordner</option><option value="bi-globe">🌐 Webseite</option>
+          <option value="bi-trophy-fill">🏆 Trophäe</option>
+        </select></div>
+        <div class="form-check">
+          <input type="checkbox" name="is_active" id="editLinkActive" class="form-check-input" value="1">
+          <label class="form-check-label small" for="editLinkActive">Aktiv</label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Abbrechen</button>
+        <button type="submit" class="btn btn-bundesliga btn-sm">Speichern</button>
+      </div>
+    </form>
+  </div></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Dateidaten ────────────────────────────────────────────────
+const ALL_FILES = [
+  {% for f in all_files %}
+  {
+    id: {{ f.id }},
+    orig_name: {{ f.orig_name|tojson }},
+    filename: {{ f.filename|tojson }},
+    file_type: {{ f.file_type|tojson }},
+    file_size: {{ f.file_size }},
+    folder_id: {{ f.folder_id if f.folder_id is not none else 'null' }},
+    ext: {{ (f.orig_name.rsplit('.',1)[-1].lower() if '.' in f.orig_name else '')|tojson }}
+  }{% if not loop.last %},{% endif %}
+  {% endfor %}
+];
+
+const FOLDERS = {
+  {% for folder in folders %}
+  {{ folder.id }}: {{ folder.name|tojson }}{% if not loop.last %},{% endif %}
+  {% endfor %}
+};
+
+// ── Ansichts-State ────────────────────────────────────────────
+let currentFilter = 'all'; // 'all' | folder_id | null (kein Ordner)
+let selected      = new Set();
+let draggedFileId = null;
+
+function getFilteredFiles() {
+  if (currentFilter === 'all') return ALL_FILES;
+  if (currentFilter === null) return ALL_FILES.filter(f => f.folder_id === null);
+  return ALL_FILES.filter(f => f.folder_id === currentFilter);
+}
+
+function renderFiles() {
+  const files = getFilteredFiles();
+  const grid  = document.getElementById('fileGrid');
+  if (files.length === 0) {
+    grid.innerHTML = '<div class="text-center text-muted py-5"><i class="bi bi-folder2-open fs-1"></i><p class="mt-2">Keine Dateien</p></div>';
+    return;
+  }
+  grid.innerHTML = `<table class="table table-sm table-hover mb-0 align-middle">
+    <tbody>
+      ${files.map(f => {
+        const icon = f.file_type === 'image'
+          ? `<img src="/medien/uploads/${f.filename}" style="width:34px;height:34px;object-fit:cover;border-radius:4px" loading="lazy">`
+          : `<span class="fs-5">${f.ext==='pdf'?'📄':f.ext==='mp4'||f.ext==='mov'?'🎬':'📎'}</span>`;
+        const size = f.file_size >= 1048576
+          ? (f.file_size/1048576).toFixed(1)+' MB'
+          : Math.round(f.file_size/1024)+' KB';
+        const chk = selected.has(f.id) ? 'checked' : '';
+        return `<tr draggable="true"
+                    ondragstart="fileDragStart(event,${f.id})"
+                    ondragend="fileDragEnd(event)"
+                    class="${selected.has(f.id)?'table-warning':''}">
+          <td onclick="event.stopPropagation()">
+            <input type="checkbox" class="form-check-input file-chk" value="${f.id}"
+                   ${chk} onchange="toggleSelect(${f.id},this.checked)">
+          </td>
+          <td class="text-center" style="width:44px">${icon}</td>
+          <td>
+            <div class="small fw-semibold text-truncate" style="max-width:200px">${esc(f.orig_name)}</div>
+            <div class="text-muted" style="font-size:.7rem">${size}${f.folder_id ? ' · '+esc(FOLDERS[f.folder_id]||'') : ''}</div>
+          </td>
+          <td class="text-center" style="width:44px">
+            <button class="btn btn-sm btn-outline-danger py-0 px-1"
+                    onclick="delFile(${f.id},'${esc(f.orig_name)}')" title="Löschen">
+              <i class="bi bi-trash" style="font-size:.75rem"></i>
+            </button>
+          </td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>`;
+}
+
+function esc(t) {
+  return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ── Navigation ────────────────────────────────────────────────
+window.showAll = function() {
+  currentFilter = 'all';
+  selected.clear();
+  setNavActive('nav-all');
+  document.getElementById('contentTitle').textContent = 'Alle Dateien';
+  document.getElementById('contentCount').textContent = ALL_FILES.length;
+  renderFiles(); updateBulkBar();
+};
+
+window.showFolder = function(folderId, name) {
+  currentFilter = folderId;
+  selected.clear();
+  setNavActive(folderId === null ? 'nav-none' : 'nav-' + folderId);
+  document.getElementById('contentTitle').textContent = name;
+  const cnt = getFilteredFiles().length;
+  document.getElementById('contentCount').textContent = cnt;
+  // Upload-Ordner vorselektieren
+  const sel = document.getElementById('uploadFolderSel');
+  if (sel && folderId !== null) sel.value = folderId;
+  renderFiles(); updateBulkBar();
+};
+
+function setNavActive(id) {
+  document.querySelectorAll('.folder-nav-item').forEach(el => el.classList.remove('active'));
+  const el = document.getElementById(id);
+  if (el) el.classList.add('active');
+}
+
+// ── Auswahl ───────────────────────────────────────────────────
+function toggleSelect(id, on) {
+  if (on) selected.add(id); else selected.delete(id);
+  updateBulkBar();
+}
+window.toggleAll = function(cb) {
+  getFilteredFiles().forEach(f => { if (cb.checked) selected.add(f.id); else selected.delete(f.id); });
+  renderFiles(); updateBulkBar();
+};
+window.clearSel = function() {
+  selected.clear(); renderFiles(); updateBulkBar();
+};
+function updateBulkBar() {
+  const bar = document.getElementById('bulkBar');
+  bar.classList.toggle('d-none', selected.size === 0);
+  document.getElementById('selCount').textContent = selected.size;
+  const allCb = document.getElementById('checkAll');
+  const total = getFilteredFiles().length;
+  allCb.checked       = total > 0 && selected.size === total;
+  allCb.indeterminate = selected.size > 0 && selected.size < total;
+}
+
+// ── Datei löschen ─────────────────────────────────────────────
+window.delFile = function(id, name) {
+  if (!confirm('„' + name + '" löschen?')) return;
+  submitForm([['action','delete_file'],['file_id',id]]);
+};
+window.bulkDelete = function() {
+  if (!selected.size) return;
+  if (!confirm(selected.size + ' Datei(en) löschen?')) return;
+  const pairs = [['action','bulk_delete']];
+  selected.forEach(id => pairs.push(['file_ids', id]));
+  submitForm(pairs);
+};
+
+// ── Verschieben ───────────────────────────────────────────────
+window.bulkMove = function() {
+  const fid = document.getElementById('bulkMoveFolder').value;
+  if (!fid || !selected.size) return;
+  const pairs = [['action','bulk_move'],['folder_id',fid]];
+  selected.forEach(id => pairs.push(['file_ids', id]));
+  submitForm(pairs);
+};
+
+function submitForm(pairs) {
+  const form = document.createElement('form');
+  form.method = 'POST';
+  pairs.forEach(([n,v]) => {
+    const i = document.createElement('input'); i.type='hidden'; i.name=n; i.value=v;
+    form.appendChild(i);
+  });
+  document.body.appendChild(form); form.submit();
+}
+
+// ── Drag & Drop (Dateien → Ordner-Navigation) ─────────────────
+window.fileDragStart = function(e, fileId) {
+  draggedFileId = String(fileId);
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', String(fileId));
+};
+window.fileDragEnd = function(e) {
+  draggedFileId = null;
+};
+window.navDragOver = function(e, el) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  el.style.background = 'rgba(26,94,42,.15)';
+  el.style.outline    = '2px solid #1a5e2a';
+};
+window.navDragLeave = function(el) {
+  el.style.background = '';
+  el.style.outline    = '';
+};
+window.navDrop = function(e, folderId, el) {
+  e.preventDefault();
+  el.style.background = '';
+  el.style.outline    = '';
+  const fid = e.dataTransfer.getData('text/plain') || draggedFileId;
+  if (!fid) return;
+  submitForm([['action','move_file'],['file_id',fid],['folder_id',folderId],['overwrite','0']]);
+};
+
+// ── Ordner löschen ────────────────────────────────────────────
+window.deleteFolder = function(id, name) {
+  if (!confirm('Ordner „' + name + '" löschen? Dateien bleiben erhalten.')) return;
+  document.getElementById('deleteFolderID').value = id;
+  document.getElementById('deleteFolderForm').submit();
+};
+
+// ── Link bearbeiten ───────────────────────────────────────────
+window.editLink = function(id, title, url, desc, icon, active) {
+  document.getElementById('editLinkId').value    = id;
+  document.getElementById('editLinkTitle').value = title;
+  document.getElementById('editLinkUrl').value   = url;
+  document.getElementById('editLinkDesc').value  = desc;
+  document.getElementById('editLinkActive').checked = !!active;
+  const sel = document.getElementById('editLinkIcon');
+  for (let o of sel.options) o.selected = (o.value === icon);
+  new bootstrap.Modal(document.getElementById('editLinkModal')).show();
+};
+
+// ── Upload Drop-Zone ──────────────────────────────────────────
+const ALLOWED_EXTS = new Set([
+  'jpg','jpeg','png','gif','webp',
+  'mp4','mov','avi','mkv','webm','m4v',
+  'mp3','ogg','wav','m4a','aac','flac','opus',
+  'pdf','doc','docx','xls','xlsx','ppt','pptx','txt','zip'
+]);
+
+function fileAllowed(file) {
+  const ext = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
+  return ALLOWED_EXTS.has(ext);
+}
+
+function applyFilesToInput(fileList) {
+  const dt = new DataTransfer();
+  let skipped = 0;
+  for (const file of fileList) {
+    if (fileAllowed(file)) { dt.items.add(file); } else { skipped++; }
+  }
+  const fi = document.getElementById('fileInput');
+  fi.files = dt.files;
+  updateFileLabel(fi);
+  const n = dt.files.length;
+  let msg = n > 0
+    ? `<i class="bi bi-check-circle text-success"></i> ${n} Datei(en) bereit`
+    : `<i class="bi bi-x-circle text-danger"></i> Keine gültigen Dateien`;
+  if (skipped) msg += ` <span class="text-warning">(${skipped} nicht unterstützt)</span>`;
+  uploadDZ.innerHTML = msg;
+}
+
+function updateFileLabel(input) {
+  const n = input.files.length;
+  document.getElementById('fileLabel').textContent =
+    n > 0 ? n + ' Datei(en) ausgewählt' : 'Bilder, Videos, Audio, ZIP, Docs · Strg+V zum Einfügen';
+}
+
+const uploadDZ = document.getElementById('uploadDropZone');
+if (uploadDZ) {
+  uploadDZ.addEventListener('click', () => document.getElementById('fileInput').click());
+  uploadDZ.addEventListener('dragover', e => {
+    e.preventDefault();
+    uploadDZ.style.background = '#d4edda';
+    uploadDZ.style.borderColor = '#1a5e2a';
+  });
+  uploadDZ.addEventListener('dragleave', () => {
+    uploadDZ.style.background = '';
+    uploadDZ.style.borderColor = '';
+  });
+  uploadDZ.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadDZ.style.background = '';
+    uploadDZ.style.borderColor = '';
+    if (draggedFileId) return;  // Nur wenn KEIN Datei-Drag aus der Tabelle läuft
+    applyFilesToInput(e.dataTransfer.files);
+  });
+}
+
+// ── Zwischenablage (Strg+V / Cmd+V) ──────────────────────────
+document.addEventListener('paste', e => {
+  // Nicht feuern wenn Nutzer gerade in einem Textfeld tippt
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  const files = [];
+  for (const item of items) {
+    if (item.kind === 'file') {
+      const f = item.getAsFile();
+      if (f) files.push(f);
+    }
+  }
+  if (!files.length) return;
+  e.preventDefault();
+  applyFilesToInput(files);
+  // Upload-Form einblenden falls zugeklappt
+  const uf = document.getElementById('uploadForm');
+  if (uf && !uf.classList.contains('show')) new bootstrap.Collapse(uf).show();
+  // Kurz zur Drop-Zone scrollen damit Nutzer Feedback sieht
+  uploadDZ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+});
+
+// ── Tab nach POST wiederherstellen ────────────────────────────
+const lastTab = sessionStorage.getItem('medienTab');
+if (lastTab) {
+  const tabEl = document.querySelector('[href="' + lastTab + '"]');
+  if (tabEl) new bootstrap.Tab(tabEl).show();
+}
+document.querySelectorAll('[data-bs-toggle="tab"]').forEach(t => {
+  t.addEventListener('shown.bs.tab', e => sessionStorage.setItem('medienTab', e.target.getAttribute('href')));
+});
+
+// ── Initial rendern ───────────────────────────────────────────
+showAll();
+</script>
+{% endblock %}

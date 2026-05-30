@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Ewige Tabelle (Archiv){% endblock %}
+
+{% block head %}
+<style>
+.et-table { font-size: .78rem; }
+.et-table th, .et-table td { padding: .25rem .4rem; white-space: nowrap; }
+.et-sticky  { position: sticky; left: 0;      background: var(--bs-body-bg); z-index: 2; border-right: 1px solid var(--bs-border-color) !important; min-width:2.5rem }
+.et-sticky-2{ position: sticky; left: 2.5rem; background: var(--bs-body-bg); z-index: 2; border-right: 2px solid var(--bs-border-color) !important; min-width:6rem }
+thead .et-sticky, thead .et-sticky-2 { background: #f8f9fa; z-index: 3; }
+.cell-win    { background: #ffc10733 !important; font-weight: 700; }
+.cell-top3   { background: #d4edda55 !important; }
+.cell-mid    { background: transparent; }
+.cell-last   { background: #f8d7da44 !important; }
+.cell-empty  { color: #adb5bd; }
+.sort-active { color: #1a5e2a; font-weight: 700; }
+.et-avg      { font-weight: 600; min-width: 3.5rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="mb-0"><i class="bi bi-stars me-2"></i>Ewige Tabelle – Archiv</h4>
+  <a href="{{ url_for('archiv') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Archiv
+  </a>
+</div>
+
+{% if not tipper_rows %}
+<div class="alert alert-info">Noch keine Archiv-Daten vorhanden.</div>
+{% else %}
+
+<div class="card shadow-sm mb-3">
+  <div class="card-body py-2 d-flex flex-wrap gap-3 align-items-center" style="font-size:.8rem">
+    <span><span class="badge" style="background:#ffc10733;color:#000;border:1px solid #ffc107">1. Platz</span> Saisonsieger</span>
+    <span><span class="badge" style="background:#d4edda55;color:#000;border:1px solid #28a745">Top 3</span> Podestplatz</span>
+    <span><span class="badge" style="background:#f8d7da44;color:#000;border:1px solid #dc3545">Letzter</span> Letzter Platz</span>
+    <span class="text-muted">Wert = Gesamtabweichung (niedriger = besser)</span>
+  </div>
+</div>
+
+<div class="table-responsive" style="max-height:80vh; overflow:auto">
+  <table class="table table-bordered table-hover et-table mb-0" id="etTable">
+    <thead class="table-light sticky-top">
+      <tr>
+        <th class="et-sticky text-center" style="min-width:2.5rem">#</th>
+        <th class="et-sticky-2" style="min-width:6rem; cursor:pointer" onclick="sortTable('name')" id="th-name">
+          Name <i class="bi bi-arrow-down-up ms-1 opacity-50" style="font-size:.6rem"></i>
+        </th>
+        <th class="text-center" style="min-width:3rem; cursor:pointer" onclick="sortTable('n')" id="th-n">
+          <abbr title="Anzahl Teilnahmen">T</abbr>
+        </th>
+        <th class="text-center et-avg" style="cursor:pointer; min-width:4rem" onclick="sortTable('avg')" id="th-avg">
+          Gesamt <i class="bi bi-arrow-up ms-1" style="font-size:.6rem" id="sort-icon"></i>
+        </th>
+        {% for s in seasons %}
+        <th class="text-center" style="min-width:3.2rem">
+          <a href="{{ url_for('archiv', season=s) }}" class="text-decoration-none text-dark" title="{{ s }}">
+            {{ s[2:4] }}/{{ s[7:9] }}
+          </a>
+        </th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody id="etBody">
+      {% for t in tipper_rows %}
+      {% set tdata = detail.get(t.tipper, {}) %}
+      {% set name = t.display_name or t.username or t.tipper %}
+      <tr data-name="{{ name | lower }}" data-n="{{ t.teilnahmen }}" data-avg="{{ t.gesamt or 9999 }}">
+        <td class="et-sticky text-center text-muted fw-bold">{{ t.rang }}</td>
+        <td class="et-sticky-2">
+          {% if t.user_id %}
+          <a href="{{ url_for('archiv_karriere', tipper_name=t.tipper) }}" class="text-decoration-none fw-semibold">
+            {{ name }}
+          </a>
+          {% else %}
+          <a href="{{ url_for('archiv_karriere', tipper_name=t.tipper) }}" class="text-decoration-none text-muted">
+            {{ t.tipper }}
+          </a>
+          {% endif %}
+        </td>
+        <td class="text-center text-muted">{{ t.teilnahmen }}</td>
+        <td class="text-center et-avg fw-semibold">{{ '%.2f' | format(t.gesamt) if t.gesamt else '–' }}</td>
+        {% for s in seasons %}
+        {% set sd = tdata.get(s) %}
+        {% if sd %}
+          <td class="text-center
+            {% if sd.rang == 1 %}cell-win
+            {% elif sd.rang <= 3 %}cell-top3
+            {% elif sd.rang == sd.total %}cell-last
+            {% else %}cell-mid{% endif %}"
+            title="{{ s }}: Rang {{ sd.rang }}/{{ sd.total }}">
+            {{ '%.2f' | format(sd.pct) }}
+          </td>
+        {% else %}
+          <td class="text-center cell-empty">–</td>
+        {% endif %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+let sortDir = { name: 'asc', n: 'desc', avg: 'asc' };
+let lastSort = 'avg';
+
+function sortTable(key) {
+  const body = document.getElementById('etBody');
+  const rows = Array.from(body.querySelectorAll('tr'));
+  const dir  = sortDir[key] === 'asc' ? 1 : -1;
+
+  rows.sort((a, b) => {
+    const va = a.dataset[key === 'n' ? 'n' : key === 'avg' ? 'avg' : 'name'];
+    const vb = b.dataset[key === 'n' ? 'n' : key === 'avg' ? 'avg' : 'name'];
+    if (key === 'name') return dir * va.localeCompare(vb);
+    return dir * (parseFloat(va) - parseFloat(vb));
+  });
+
+  rows.forEach(r => body.appendChild(r));
+  sortDir[key] = sortDir[key] === 'asc' ? 'desc' : 'asc';
+  lastSort = key;
+
+  // Header-Feedback
+  ['name','n','avg'].forEach(k => {
+    const th = document.getElementById('th-' + k);
+    if (th) th.classList.toggle('sort-active', k === key);
+  });
+  const icon = document.getElementById('sort-icon');
+  if (icon) icon.className = 'bi bi-arrow-' + (sortDir[key] === 'asc' ? 'down' : 'up') + ' ms-1';
+}
+
+// Standard: nach Durchschnitt sortieren (aufsteigend = beste zuerst)
+sortTable('avg');
+</script>
+{% endblock %}

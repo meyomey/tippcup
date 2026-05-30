@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+{% block title %}Spieltage – {{ leagues[league] }} Spieltag {{ matchday }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-end mb-2 no-print">
+  <button class="btn btn-sm btn-print" onclick="window.print()">
+    <i class="bi bi-printer me-1"></i>PDF / Drucken
+  </button>
+</div>
+<div class="print-header d-none">
+  <h3>⚽ {{ leagues[league] }} – {{ matchday }}. Spieltag {{ year }}/{{ year+1-2000 }}</h3>
+</div>
+
+<!-- Liga-Auswahl & Navigation -->
+<div class="card shadow-sm mb-3">
+  <div class="card-body py-2 px-3">
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <!-- Liga-Tabs -->
+      {% for lg_key, lg_name in leagues.items() %}
+      <a href="{{ url_for('spieltage', league=lg_key, matchday=matchday) }}"
+         class="btn btn-sm {% if league == lg_key %}btn-bundesliga{% else %}btn-outline-secondary{% endif %}">
+        <i class="bi bi-shield-fill me-1"></i>{{ lg_name }}
+      </a>
+      {% endfor %}
+
+      <div class="ms-auto d-flex align-items-center gap-1">
+        <!-- Vorheriger Spieltag -->
+        {% if matchday > 1 %}
+        <a href="{{ url_for('spieltage', league=league, matchday=matchday-1) }}"
+           class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-chevron-left"></i>
+        </a>
+        {% endif %}
+
+        <!-- Spieltag-Auswahl -->
+        <select class="form-select form-select-sm" style="width:auto"
+                onchange="location.href='{{ url_for('spieltage', league=league, matchday=0) }}'.replace('/0','/')+this.value">
+          {% for d in range(1, max_matchday+1) %}
+          <option value="{{ d }}" {% if d == matchday %}selected{% endif %}>{{ d }}. Spieltag</option>
+          {% endfor %}
+        </select>
+
+        <!-- Nächster Spieltag -->
+        {% if matchday < max_matchday %}
+        <a href="{{ url_for('spieltage', league=league, matchday=matchday+1) }}"
+           class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-chevron-right"></i>
+        </a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Live-Indikator -->
+{% if has_live %}
+<div class="alert alert-success py-2 d-flex align-items-center gap-2 mb-3" id="live-banner">
+  <span class="live-dot"></span>
+  <strong>Live!</strong> Spiele laufen gerade – Ergebnisse aktualisieren sich automatisch.
+  <span class="ms-auto small text-muted" id="live-countdown">Prüfung in 2 Min.</span>
+</div>
+{% endif %}
+
+<!-- Fehleranzeige -->
+{% if error %}
+<div class="alert alert-warning">
+  <i class="bi bi-exclamation-triangle me-2"></i>{{ error }}
+</div>
+{% endif %}
+
+<!-- Zuletzt aktualisiert -->
+<p class="text-muted small text-end mb-2 no-print">
+  <i class="bi bi-clock me-1"></i>Stand: <span id="stand-time">{{ now_local }}</span> Uhr
+</p>
+
+<!-- Spielkarten -->
+<div id="matches-container">
+  {% if matches %}
+  <div class="row g-2">
+    {% for m in matches %}
+    <div class="col-12 col-md-6 col-xl-4">
+      {% set status = 'live' if m.is_live else ('done' if m.is_finished else 'upcoming') %}
+      <div class="match-card match-{{ status }}" data-match-id="{{ m.match_id }}">
+
+        <!-- Status-Badge -->
+        <div class="match-status-bar">
+          {% if m.is_live %}
+            <span class="match-badge-live"><span class="live-dot-sm"></span>LIVE</span>
+            {% if m.live_status == 'HALF_TIME' %}
+              <span class="match-time-info">Halbzeit</span>
+            {% elif m.live_status == 'PAUSED' %}
+              <span class="match-time-info">Pause</span>
+            {% else %}
+              <span class="match-time-info match-minute" data-kickoff="{{ m.datetime }}">{% if m.live_minute %}{{ m.live_minute }}'{% else %}&bull;&bull;&bull;{% endif %}</span>
+            {% endif %}
+            {% if m.datetime %}
+            <span class="match-kickoff-info">
+              <i class="bi bi-clock-history me-1 opacity-50"></i>Anpfiff {{ m.datetime[11:16] }} Uhr
+            </span>
+            {% endif %}
+          {% elif m.is_finished %}
+            <span class="match-badge-done"><i class="bi bi-check-circle me-1"></i>Abpfiff</span>
+            {% if m.datetime %}
+            <span class="match-kickoff-info">{{ m.datetime[11:16] }} Uhr</span>
+            {% endif %}
+          {% else %}
+            <span class="match-badge-upcoming">
+              <i class="bi bi-clock me-1"></i>
+              {% if m.datetime %}
+                {% set dt = m.datetime %}
+                {{ dt[8:10] }}.{{ dt[5:7] }}. {{ dt[11:16] }} Uhr
+              {% else %}–{% endif %}
+            </span>
+          {% endif %}
+        </div>
+
+        <!-- Teams & Ergebnis -->
+        <div class="match-body">
+          <!-- Team 1 -->
+          <div class="match-team match-team-left">
+            {% if m.team1_icon %}
+            <img src="{{ m.team1_icon }}" alt="" class="match-logo"
+                 onerror="this.style.display='none'">
+            {% endif %}
+            <span class="match-team-name">
+              <span class="d-none d-sm-inline">{{ m.team1_name }}</span>
+              <span class="d-sm-none">{{ m.team1_short }}</span>
+            </span>
+          </div>
+
+          <!-- Ergebnis-Mitte -->
+          <div class="match-score-center">
+            {% if m.is_finished or m.is_live %}
+              <div class="match-score-ft">
+                <span class="match-goal {% if m.goals_ft_1 is not none and m.goals_ft_2 is not none and m.goals_ft_1 > m.goals_ft_2 %}match-goal-win{% endif %}">
+                  {{ m.goals_ft_1 if m.goals_ft_1 is not none else '–' }}
+                </span>
+                <span class="match-colon">:</span>
+                <span class="match-goal {% if m.goals_ft_1 is not none and m.goals_ft_2 is not none and m.goals_ft_2 > m.goals_ft_1 %}match-goal-win{% endif %}">
+                  {{ m.goals_ft_2 if m.goals_ft_2 is not none else '–' }}
+                </span>
+              </div>
+              {% if m.goals_ht_1 is not none %}
+              <div class="match-score-ht">
+                HZ: {{ m.goals_ht_1 }}:{{ m.goals_ht_2 }}
+              </div>
+              {% endif %}
+            {% else %}
+              <div class="match-score-dash">vs</div>
+            {% endif %}
+          </div>
+
+          <!-- Team 2 -->
+          <div class="match-team match-team-right">
+            <span class="match-team-name">
+              <span class="d-none d-sm-inline">{{ m.team2_name }}</span>
+              <span class="d-sm-none">{{ m.team2_short }}</span>
+            </span>
+            {% if m.team2_icon %}
+            <img src="{{ m.team2_icon }}" alt="" class="match-logo"
+                 onerror="this.style.display='none'">
+            {% endif %}
+          </div>
+        </div>
+
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% elif not error %}
+  <div class="text-center p-5 text-muted">
+    <i class="bi bi-calendar-x fs-1"></i>
+    <p class="mt-2">Keine Spiele für diesen Spieltag gefunden.</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Datenquelle -->
+<p class="text-muted text-center small mt-3">
+  <i class="bi bi-database me-1"></i>
+  Daten: <a href="https://www.football-data.org" target="_blank">football-data.org</a> &middot; <a href="https://openligadb.de" target="_blank">OpenligaDB</a>
+  {% if has_live %}· Live-Aktualisierung alle 30 Sekunden{% endif %}
+</p>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const league   = {{ league|tojson }};
+  const year     = {{ year }};
+  const matchday = {{ matchday }};
+  let hasLive    = {{ 'true' if has_live else 'false' }};
+  let countdown  = hasLive ? 120 : 1800;  // Sekunden bis nächste Prüfung
+  let nextCheck  = countdown;
+  const cdEl     = document.getElementById('live-countdown');
+  let timer      = null;
+  function updateScores(matches) {
+    matches.forEach(function(m) {
+      const card = document.querySelector('[data-match-id="' + m.match_id + '"]');
+      if (!card) return;
+
+      // Status-Klasse
+      card.className = card.className.replace(/match-(live|done|upcoming)/g, '');
+      card.classList.add('match-' + (m.is_live ? 'live' : (m.is_finished ? 'done' : 'upcoming')));
+
+      // Status-Bar
+      const bar = card.querySelector('.match-status-bar');
+      if (bar) {
+        if (m.is_live) {
+          let minuteHtml = '';
+          if (m.live_status === 'HALF_TIME') {
+            minuteHtml = '<span class="match-time-info">Halbzeit</span>';
+          } else if (m.live_status === 'PAUSED') {
+            minuteHtml = '<span class="match-time-info">Pause</span>';
+          } else {
+            // Minute aus live_minute (API) oder aus Anpfiffzeit berechnen
+            let min = m.live_minute;
+            if (!min && m.datetime) {
+              try {
+                const kickoff = new Date(m.datetime.replace(' ', 'T'));
+                const elapsed = (Date.now() - kickoff.getTime()) / 60000;
+                if (elapsed > 60) min = Math.max(1, Math.min(90, Math.round(elapsed - 15)));
+                else              min = Math.max(1, Math.min(90, Math.round(elapsed)));
+              } catch(e) {}
+            }
+            if (min) minuteHtml = `<span class="match-time-info match-minute">${min}'</span>`;
+          }
+          let kickoffHtml = '';
+          if (m.datetime) {
+            const t = m.datetime.substring(11, 16);
+            kickoffHtml = `<span class="match-kickoff-info"><i class="bi bi-clock-history me-1 opacity-50"></i>Anpfiff ${t} Uhr</span>`;
+          }
+          bar.innerHTML = `<span class="match-badge-live"><span class="live-dot-sm"></span>LIVE</span>${minuteHtml}${kickoffHtml}`;
+        } else if (m.is_finished) {
+          let kickoffHtml = m.datetime ? `<span class="match-kickoff-info">${m.datetime.substring(11,16)} Uhr</span>` : '';
+          bar.innerHTML = `<span class="match-badge-done"><i class="bi bi-check-circle me-1"></i>Abpfiff</span>${kickoffHtml}`;
+        }
+      }
+
+      // Ergebnis
+      if (m.is_finished || m.is_live) {
+        const center = card.querySelector('.match-score-center');
+        if (center && m.goals_ft_1 !== null) {
+          const w1 = m.goals_ft_1 > m.goals_ft_2 ? 'match-goal-win' : '';
+          const w2 = m.goals_ft_2 > m.goals_ft_1 ? 'match-goal-win' : '';
+          const ht = (m.goals_ht_1 !== null)
+            ? '<div class="match-score-ht">HZ: ' + m.goals_ht_1 + ':' + m.goals_ht_2 + '</div>'
+            : '';
+          center.innerHTML =
+            '<div class="match-score-ft">' +
+              '<span class="match-goal ' + w1 + '">' + m.goals_ft_1 + '</span>' +
+              '<span class="match-colon">:</span>' +
+              '<span class="match-goal ' + w2 + '">' + m.goals_ft_2 + '</span>' +
+            '</div>' + ht;
+        }
+      }
+    });
+  }
+
+  async function poll() {
+    try {
+      const r = await fetch('/spieltage/api/' + league + '/' + year + '/' + matchday);
+      const d = await r.json();
+      if (d.ok) {
+        updateScores(d.matches);
+        hasLive = d.has_live;
+        // Intervall vom Server übernehmen (lastchangedate-Logik)
+        nextCheck = d.next_check_sec || (hasLive ? 120 : 1800);
+        countdown = nextCheck;
+        // Live-Banner ein/ausblenden
+        const banner = document.getElementById('live-banner');
+        if (banner) banner.style.display = hasLive ? '' : 'none';
+        // Zeitstempel aktualisieren
+        const tsEl = document.getElementById('stand-time');
+        if (tsEl) {
+          const now = new Date();
+          const pad = n => String(n).padStart(2,'0');
+          tsEl.textContent = pad(now.getDate()) + '.' + pad(now.getMonth()+1) + '.' + now.getFullYear()
+            + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ' Uhr';
+        }
+        if (d.warning && cdEl) cdEl.textContent = '⚠ ' + d.warning;
+        // Bestenliste-Hinweis wenn Scores neu berechnet wurden
+        if (d.scores_updated) {
+          showScoresUpdated();
+        }
+      }
+    } catch(e) {
+      countdown = nextCheck;  // bei Fehler normales Intervall abwarten
+    }
+  }
+
+  // Countdown-Anzeige + dynamisches Polling
+  function formatCountdown(secs) {
+    if (secs >= 60) return 'Prüfung in ' + Math.ceil(secs/60) + ' Min.';
+    return 'Prüfung in ' + secs + 's';
+  }
+
+  function showScoresUpdated() {
+    // Kurzen Hinweis einblenden dass Bestenliste aktualisiert wurde
+    let note = document.getElementById('scores-updated-note');
+    if (!note) {
+      note = document.createElement('div');
+      note.id        = 'scores-updated-note';
+      note.className = 'alert alert-success alert-dismissible py-2 mt-2';
+      note.innerHTML = '<i class="bi bi-trophy-fill me-2 text-warning"></i>'
+        + '<strong>Bestenliste aktualisiert!</strong> Ein Spiel wurde beendet – Punkte neu berechnet. '
+        + '<a href="/leaderboard" class="alert-link">Zur Bestenliste →</a>'
+        + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+      const container = document.getElementById('matches-container');
+      if (container) container.before(note);
+    }
+    // Nach 30 Sekunden automatisch ausblenden
+    setTimeout(() => { if (note) note.remove(); }, 30000);
+  }
+
+  // Spielminute clientseitig aus Anpfiffzeit berechnen und alle 30s aktualisieren
+  function calcLiveMinutes() {
+    document.querySelectorAll('.match-minute[data-kickoff]').forEach(function(el) {
+      const raw = el.dataset.kickoff;
+      if (!raw || raw === 'None') return;
+      const kickoff = new Date(raw.replace(' ', 'T'));
+      if (isNaN(kickoff.getTime())) return;
+      const elapsed = (Date.now() - kickoff.getTime()) / 60000;
+      if (elapsed < 0 || elapsed > 130) return;
+      const min = elapsed > 60
+        ? Math.max(46, Math.min(90, Math.round(elapsed - 15)))
+        : Math.max(1,  Math.min(45, Math.round(elapsed)));
+      el.textContent = min + "'";
+    });
+  }
+  calcLiveMinutes();
+  setInterval(calcLiveMinutes, 30000);
+
+    timer = setInterval(function() {
+      countdown--;
+      if (cdEl) cdEl.textContent = formatCountdown(countdown);
+      if (countdown <= 0) {
+        countdown = nextCheck;
+        poll();
+      }
+    }, 1000);
+  }
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}Start – Tippcup Bundesliga{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-end mb-2 no-print"><button class="btn btn-sm btn-print" onclick="window.print()"><i class="bi bi-printer me-1"></i>PDF / Drucken</button></div><div class="print-header d-none"><h3>⚽ Tippcup Bundesliga – Übersicht</h3></div><div class="row g-4">
+  <!-- Status -->
+  <div class="col-12 col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-header bg-bundesliga text-white"><i class="bi bi-info-circle-fill me-2"></i>Saisonübersicht</div>
+      <div class="card-body">
+        {% if season %}
+          <h5 class="fw-bold">{{ season.name }}</h5>
+          <div class="d-flex flex-wrap gap-2 mb-3">
+            {% if season.season_started %}<span class="badge bg-success"><i class="bi bi-play-fill me-1"></i>Saison läuft</span>
+            {% else %}<span class="badge bg-secondary"><i class="bi bi-clock me-1"></i>Noch nicht gestartet</span>{% endif %}
+            {% if season.tips_locked %}<span class="badge bg-danger"><i class="bi bi-lock-fill me-1"></i>Tipps gesperrt</span>
+            {% else %}<span class="badge bg-primary"><i class="bi bi-pencil me-1"></i>Tipps offen</span>{% endif %}
+          </div>
+          {% if season.last_updated %}
+          <p class="text-muted small mb-3"><i class="bi bi-arrow-clockwise me-1"></i>Aktualisiert: {{ season.last_updated|localdt }} Uhr</p>
+          {% endif %}
+
+          {# Tippschluss mit Live-Countdown #}
+          {% if not season.tips_locked %}
+          {% for lg_key, lg_name in leagues.items() %}
+            {% set dl_str = season['deadline_' ~ lg_key] %}
+            {% if dl_str %}
+            {% set remaining = ((dl_str | string)[:19] | todatetime - now_local) if now_local is defined else none %}
+            <div class="d-flex align-items-center gap-2 mb-1 p-2 rounded"
+                 id="deadline-box-{{ lg_key }}"
+                 style="border:1px solid #ffc107;background:rgba(255,193,7,.1)">
+              <i class="bi bi-clock-fill text-warning"></i>
+              <div class="small flex-grow-1">
+                <span class="fw-semibold">{{ lg_name }}:</span>
+                {{ dl_str[8:10] }}.{{ dl_str[5:7] }}.{{ dl_str[:4] }}
+                um {{ dl_str[11:16] }} Uhr
+              </div>
+              <span id="cd-{{ lg_key }}" class="deadline-countdown countdown-ok">…</span>
+            </div>
+            <script>
+            (function() {
+              const deadline = new Date('{{ dl_str[:19] }}');
+              const el  = document.getElementById('cd-{{ lg_key }}');
+              const box = document.getElementById('deadline-box-{{ lg_key }}');
+              function tick() {
+                const diff = Math.floor((deadline - Date.now()) / 1000);
+                if (diff <= 0) {
+                  el.textContent = '⛔ Abgelaufen';
+                  el.className = 'deadline-countdown countdown-urgent';
+                  box.style.borderColor = '#dc3545';
+                  box.style.background = 'rgba(220,53,69,.1)';
+                } else if (diff < 3600) {
+                  const m = Math.floor(diff/60), s = diff%60;
+                  el.textContent = `⚠️ ${m}:${String(s).padStart(2,'0')} Min!`;
+                  el.className = 'deadline-countdown countdown-urgent';
+                  box.style.borderColor = '#dc3545';
+                  box.style.background = 'rgba(220,53,69,.1)';
+                } else if (diff < 86400) {
+                  const h = Math.floor(diff/3600), m = Math.floor((diff%3600)/60);
+                  el.textContent = `⏰ ${h}h ${m}min`;
+                  el.className = 'deadline-countdown countdown-warn';
+                  box.style.borderColor = '#fd7e14';
+                  box.style.background = 'rgba(253,126,20,.1)';
+                } else {
+                  const d = Math.floor(diff/86400), h = Math.floor((diff%86400)/3600);
+                  el.textContent = `📅 ${d}T ${h}h`;
+                  el.className = 'deadline-countdown countdown-ok';
+                }
+              }
+              tick(); setInterval(tick, 1000);
+            })();
+            </script>
+            {% endif %}
+          {% endfor %}
+          {% endif %}
+
+          {% if pred_status %}
+            <div class="mb-3">
+              {% for lg_key, lg_name in leagues.items() %}
+              <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="badge {% if pred_status[lg_key] %}bg-success{% else %}bg-warning text-dark{% endif %}" style="min-width:80px">
+                  {% if pred_status[lg_key] %}✓ Getippt{% else %}Ausstehend{% endif %}
+                </span>
+                <span class="small">{{ lg_name }}</span>
+              </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          {% if user_score %}
+          <div class="score-display text-center p-3 rounded mb-3{% if is_top_angsthase %} border border-warning border-2{% endif %}">
+            <div class="score-label">Mein Gesamtscore (max. {{ max_score }})</div>
+            {% if is_top_angsthase %}
+            <div class="mb-1">
+              <span class="badge bg-warning text-dark">😱 Größter Angsthase der Saison!</span>
+            </div>
+            {% endif %}
+            <div class="score-number">{{ user_score.score }}</div>
+            {% if user_rank %}
+            <div class="mt-1">
+              <span class="badge bg-light text-dark fs-6">
+                {% if user_rank == 1 %}🥇{% elif user_rank == 2 %}🥈{% elif user_rank == 3 %}🥉{% else %}{{ user_rank }}.{% endif %}
+                Platz
+              </span>
+            </div>
+            {% endif %}
+            <div class="score-sub d-flex justify-content-center gap-3 mt-1">
+              <span><strong>BL1:</strong> {{ user_score.score_bl1 }}</span>
+              <span><strong>BL2:</strong> {{ user_score.score_bl2 }}</span>
+            </div>
+            {% if angst_rank %}
+            <div class="mt-2 pt-2 border-top border-light border-opacity-25">
+              <a href="{{ url_for('angsthasen') }}" class="text-decoration-none">
+                <span class="badge bg-warning text-dark">
+                  <i class="bi bi-emoji-dizzy me-1"></i>
+                  Angsthasen: {{ angst_rank }}. Platz
+                  {% if angst_total %}<span class="opacity-75">/ {{ angst_total }}</span>{% endif %}
+                </span>
+              </a>
+            </div>
+            {% endif %}
+          </div>
+          {% endif %}
+
+          {% if not season.tips_locked %}
+          <a href="{{ url_for('predict') }}" class="btn btn-bundesliga w-100">
+            <i class="bi bi-pencil-square me-2"></i>{% if pred_status and pred_status.complete %}Tipp ändern{% else %}Tipp abgeben!{% endif %}
+          </a>
+          {% elif not pred_status or not pred_status.complete %}
+          <div class="alert alert-warning py-2"><i class="bi bi-lock-fill me-2"></i>Tippabgabe ist geschlossen.</div>
+          {% endif %}
+        {% else %}
+          <p class="text-muted">Keine aktive Saison gefunden.</p>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card shadow-sm mt-3">
+      <div class="card-header bg-bundesliga text-white"><i class="bi bi-grid-fill me-2"></i>Navigation</div>
+      <div class="list-group list-group-flush">
+        <a href="{{ url_for('leaderboard') }}" class="list-group-item list-group-item-action"><i class="bi bi-bar-chart-fill me-2 text-success"></i>Bestenliste</a>
+        <a href="{{ url_for('tips') }}" class="list-group-item list-group-item-action"><i class="bi bi-eye-fill me-2 text-primary"></i>Alle Tipps</a>
+        <a href="{{ url_for('profile') }}" class="list-group-item list-group-item-action"><i class="bi bi-person-check-fill me-2 text-warning"></i>Meine Tipps</a>
+        {% if season and not season.tips_locked %}<a href="{{ url_for('predict') }}" class="list-group-item list-group-item-action"><i class="bi bi-pencil-square me-2 text-warning"></i>Tipp abgeben</a>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabellen -->
+  <div class="col-12 col-lg-8">
+    {% for lg_key, lg_name in leagues.items() %}
+    <div class="card shadow-sm {% if not loop.last %}mb-4{% endif %}">
+      <div class="card-header bg-bundesliga text-white d-flex justify-content-between">
+        <span><i class="bi bi-table me-2"></i>{{ lg_name }}</span>
+        <small class="text-white-50">{{ lg_key.upper() }}</small>
+      </div>
+      <div class="card-body p-0">
+        {% if standings[lg_key] %}
+        <div class="table-responsive">
+          <table class="table table-hover table-sm mb-0 standings-table">
+            <thead class="table-dark">
+              <tr>
+                <th class="text-center" style="width:40px">#</th>
+                <th>Verein</th>
+                <th class="text-center d-none d-sm-table-cell">Sp</th>
+                <th class="text-center d-none d-md-table-cell">S/U/N</th>
+                <th class="text-center d-none d-sm-table-cell">Tore</th>
+                <th class="text-center fw-bold">Pkt</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for s in standings[lg_key] %}
+              <tr class="{% if s.current_rank<=4 %}cl-zone{% elif s.current_rank==5 %}el-zone{% elif s.current_rank==6 %}conf-zone{% elif s.current_rank>=16 %}relegation-zone{% endif %}">
+                <td class="text-center fw-bold">{{ s.current_rank }}</td>
+                <td>{% if s.logo_url %}<img src="{{ s.logo_url }}" style="width:18px;height:18px;object-fit:contain" class="me-1">{% endif %}
+                  <span class="d-none d-sm-inline">{{ s.name }}</span>
+                  <span class="d-sm-none">{{ s.short_name or s.name[:12] }}</span>
+                </td>
+                <td class="text-center d-none d-sm-table-cell">{{ s.matches_played }}</td>
+                <td class="text-center d-none d-md-table-cell">{{ s.wins }}/{{ s.draws }}/{{ s.losses }}</td>
+                <td class="text-center d-none d-sm-table-cell">{{ s.goals_for }}:{{ s.goals_against }}</td>
+                <td class="text-center fw-bold">{{ s.points }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center p-4 text-muted"><i class="bi bi-calendar-event fs-2"></i><p class="mt-2">Noch keine Tabellendaten.</p></div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,208 @@
+{% extends "admin/base.html" %}
+{% block title %}Admin – API-Einstellungen{% endblock %}
+
+{% block admin_content %}
+<h4 class="mb-4"><i class="bi bi-key-fill me-2"></i>API-Einstellungen</h4>
+
+<!-- Datenprovider -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-dark text-white">
+    <i class="bi bi-graph-up me-2"></i>Aktueller Datenprovider
+  </div>
+  <div class="card-body">
+    <div class="d-flex align-items-center gap-3">
+      {% if 'football-data' in provider %}
+        <span class="badge bg-success fs-6"><i class="bi bi-check-circle me-1"></i>{{ provider }}</span>
+      {% else %}
+        <span class="badge bg-warning text-dark fs-6"><i class="bi bi-exclamation-triangle me-1"></i>{{ provider }}</span>
+      {% endif %}
+    </div>
+    <div class="text-muted small mt-2">
+      <i class="bi bi-info-circle me-1"></i>
+      BL1-Tabelle: football-data.org (mit Key) oder OpenligaDB (Fallback).
+      BL2 verwendet immer OpenligaDB.
+    </div>
+  </div>
+</div>
+
+<!-- football-data.org Key -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header">
+    <i class="bi bi-key me-2"></i>football-data.org API-Key
+  </div>
+  <div class="card-body">
+    <form method="POST">
+      <input type="hidden" name="action" value="save_key">
+      <div class="mb-3">
+        <label class="form-label fw-semibold">API-Key
+          <a href="https://www.football-data.org/client/register" target="_blank"
+             class="text-muted small ms-2">
+            <i class="bi bi-box-arrow-up-right me-1"></i>Kostenlos registrieren
+          </a>
+        </label>
+        <div class="input-group">
+          <input type="text" class="form-control font-monospace"
+                 name="football_data_api_key"
+                 value="{{ current_key }}"
+                 placeholder="z.B. a1b2c3d4e5f6..."
+                 autocomplete="off">
+          <button type="button" class="btn btn-outline-secondary"
+                  onclick="toggleKeyVisibility(this)">
+            <i class="bi bi-eye"></i>
+          </button>
+        </div>
+        <div class="form-text">
+          Key wird in der Datenbank gespeichert – kein Eintrag mehr in
+          <code>passenger_wsgi.py</code> nötig.
+          Leer lassen um OpenligaDB als alleinigen Provider zu verwenden.
+        </div>
+      </div>
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-save me-1"></i>Speichern
+        </button>
+        {% if current_key %}
+        <button type="button" class="btn btn-outline-danger"
+                onclick="if(confirm('API-Key löschen?')){
+                  document.querySelector('[name=football_data_api_key]').value='';
+                  document.querySelector('form').submit();}">
+          <i class="bi bi-trash me-1"></i>Key löschen
+        </button>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Push-Benachrichtigungen Status -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-bell-fill me-2"></i>Push-Benachrichtigungen</span>
+    <span class="badge {% if vapid_ok %}bg-success{% else %}bg-danger{% endif %}">
+      {% if vapid_ok %}VAPID konfiguriert{% else %}VAPID fehlt{% endif %}
+    </span>
+  </div>
+  <div class="card-body">
+
+    <!-- Statistiken -->
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-3">
+        <div class="text-center p-3 border rounded">
+          <div class="fw-bold fs-4 {% if vapid_ok %}text-success{% else %}text-danger{% endif %}">
+            {% if vapid_ok %}✓{% else %}✗{% endif %}
+          </div>
+          <div class="small text-muted">VAPID</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="text-center p-3 border rounded">
+          <div class="fw-bold fs-4">{{ push_users }}</div>
+          <div class="small text-muted">Nutzer mit Push</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="text-center p-3 border rounded">
+          <div class="fw-bold fs-4">{{ push_total }}</div>
+          <div class="small text-muted">Geräte registriert</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="text-center p-3 border rounded">
+          <div class="fw-bold fs-4 text-muted font-monospace" style="font-size:.9rem!important">{{ vapid_ver }}</div>
+          <div class="small text-muted">Key-Version</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VAPID Info -->
+    <div class="mb-3">
+      <div class="small text-muted mb-1">Public Key (gekürzt)</div>
+      <code class="small text-break">{{ vapid_public_short }}</code>
+    </div>
+
+    {% if push_by_user %}
+    <!-- Nutzer mit aktiven Subscriptions -->
+    <div class="mb-4">
+      <div class="small fw-semibold text-muted mb-2">Aktive Subscriptions pro Nutzer</div>
+      <div class="d-flex flex-wrap gap-2">
+        {% for row in push_by_user %}
+        <span class="badge bg-secondary">
+          {{ row.display_name or row.username }}
+          <span class="badge bg-light text-dark ms-1">{{ row.n }}×</span>
+        </span>
+        {% endfor %}
+      </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info py-2 small mb-4">
+      <i class="bi bi-info-circle me-1"></i>
+      Noch keine Push-Subscriptions aktiv. Nutzer können Push im Profil aktivieren.
+    </div>
+    {% endif %}
+
+    <!-- Aktionen -->
+    <div class="row g-3">
+      <div class="col-12 col-md-6">
+        <div class="card border-warning h-100">
+          <div class="card-body py-3">
+            <h6 class="card-title"><i class="bi bi-bell-slash me-2"></i>Alle Subscriptions löschen</h6>
+            <p class="card-text small text-muted">
+              Alle gespeicherten Push-Registrierungen entfernen.
+              Nutzer müssen Push danach neu aktivieren.
+              Sinnvoll nach einem Server-Umzug oder bei Problemen.
+            </p>
+            <form method="POST"
+                  onsubmit="return confirm('Wirklich alle Push-Subscriptions löschen?\n\nAlle Nutzer müssen Push danach neu aktivieren.')">
+              <input type="hidden" name="action" value="clear_push">
+              <button type="submit" class="btn btn-outline-warning btn-sm" {% if push_total == 0 %}disabled{% endif %}>
+                <i class="bi bi-trash me-1"></i>{{ push_total }} Subscription{% if push_total != 1 %}s{% endif %} löschen
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-md-6">
+        <div class="card border-danger h-100">
+          <div class="card-body py-3">
+            <h6 class="card-title"><i class="bi bi-arrow-repeat me-2"></i>VAPID-Version rotieren</h6>
+            <p class="card-text small text-muted">
+              Erhöht die Key-Version und löscht alle Subscriptions.
+              Nötig wenn die VAPID-Keys in <code>app.py</code> geändert wurden
+              oder Push auf allen Geräten neu eingerichtet werden soll.
+              Aktuell: <strong>{{ vapid_ver }}</strong>
+            </p>
+            <form method="POST"
+                  onsubmit="return confirm('VAPID-Version rotieren?\n\nAlle Push-Subscriptions werden gelöscht.\nNutzer müssen Push auf jedem Gerät neu aktivieren.')">
+              <input type="hidden" name="action" value="rotate_vapid">
+              <button type="submit" class="btn btn-outline-danger btn-sm">
+                <i class="bi bi-arrow-repeat me-1"></i>Key-Version erhöhen & Subscriptions löschen
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Push-Diagnose Link -->
+    <div class="mt-3">
+      <a href="{{ '/push/diagnose' }}" class="btn btn-sm btn-outline-secondary" target="_blank">
+        <i class="bi bi-bug me-1"></i>Push-Diagnose (sendet Test-Push an alle Geräte)
+      </a>
+    </div>
+
+  </div>
+</div>
+
+<script>
+function toggleKeyVisibility(btn) {
+  const input = btn.previousElementSibling;
+  const isPassword = input.type === 'password';
+  input.type = isPassword ? 'text' : 'password';
+  btn.innerHTML = isPassword ? '<i class="bi bi-eye-slash"></i>' : '<i class="bi bi-eye"></i>';
+}
+document.addEventListener('DOMContentLoaded', function() {
+  const input = document.querySelector('[name=football_data_api_key]');
+  if (input && input.value) input.type = 'password';
+});
+</script>
+{% endblock %}

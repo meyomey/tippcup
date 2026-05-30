@@ -1,0 +1,1108 @@
+/* ================================================
+   Bundesliga Tippspiel – Stylesheet
+   ================================================ */
+
+:root {
+  --bl-green:       #1a5e2a;
+  --bl-green-dark:  #133f1c;
+  --bl-green-light: #2a8a40;
+  --bl-red:         #d4001a;
+  --bl-yellow:      #f5c518;
+  --zone-cl:        rgba(26, 94, 42, 0.15);
+  --zone-el:        rgba(245, 197, 24, 0.15);
+  --zone-conf:      rgba(0, 100, 200, 0.10);
+  --zone-rel:       rgba(212, 0, 26, 0.12);
+}
+
+/* ── Background & Body ── */
+body { background: #f4f6f8; }
+
+/* ── Bundesliga Color ── */
+.bg-bundesliga         { background-color: var(--bl-green) !important; }
+.text-bundesliga       { color: var(--bl-green) !important; }
+.btn-bundesliga        {
+  background-color: var(--bl-green);
+  border-color:     var(--bl-green);
+  color: #fff;
+}
+.btn-bundesliga:hover  {
+  background-color: var(--bl-green-dark);
+  border-color:     var(--bl-green-dark);
+  color: #fff;
+}
+.btn-bundesliga:active,
+.btn-bundesliga:focus  { box-shadow: 0 0 0 .25rem rgba(26,94,42,.4); }
+
+/* ── Login Page ── */
+.login-page   { background: linear-gradient(135deg, var(--bl-green-dark) 0%, var(--bl-green-light) 100%); }
+.login-card   { max-width: 420px; width: 100%; border-radius: 1rem; }
+.login-icon   { font-size: 3.5rem; }
+
+/* ── Navbar ── */
+.navbar { box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+
+/* ── Cards ── */
+.card { border: none; border-radius: .75rem; }
+.card-header { border-radius: .75rem .75rem 0 0 !important; }
+
+/* ── Score Display ── */
+.score-display {
+  background: linear-gradient(135deg, var(--bl-green-dark), var(--bl-green-light));
+  color: #fff;
+}
+.score-number {
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.score-label  { font-size: .75rem; text-transform: uppercase; letter-spacing: 1px; opacity: .8; }
+.score-sub    { font-size: .85rem; opacity: .7; margin-top: .25rem; }
+
+/* ── Standings Table Zones ── */
+.cl-zone    { background: var(--zone-cl)   !important; }
+.el-zone    { background: var(--zone-el)   !important; }
+.conf-zone  { background: var(--zone-conf) !important; }
+.relegation-zone { background: var(--zone-rel) !important; }
+
+.zone-legend { font-size: .75rem; gap: 1rem; border-top: 1px solid #eee; }
+.legend-item { padding: 2px 8px; border-radius: 4px; font-weight: 500; }
+.legend-item.cl   { background: var(--zone-cl);   color: var(--bl-green); }
+.legend-item.el   { background: var(--zone-el);   color: #7a5c00; }
+.legend-item.conf { background: var(--zone-conf); color: #003e7a; }
+.legend-item.rel  { background: var(--zone-rel);  color: #8a0010; }
+
+/* ── Sortable List (Predict Page) ── */
+.sortable-list { list-style: none; padding: 0; margin: 0; }
+
+.sortable-item {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: .5rem;
+  padding: .6rem 1rem;
+  margin-bottom: .4rem;
+  cursor: grab;
+  user-select: none;
+  transition: box-shadow .15s, transform .15s;
+}
+.sortable-item:hover     { box-shadow: 0 3px 12px rgba(0,0,0,.12); }
+.sortable-chosen         { box-shadow: 0 6px 20px rgba(0,0,0,.2) !important; z-index: 10; }
+.sortable-ghost          { opacity: 0.4; background: #e9f4ec; }
+
+.rank-badge {
+  width: 32px; height: 32px;
+  background: var(--bl-green);
+  color: #fff;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: .9rem;
+  flex-shrink: 0;
+}
+.team-logo {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.team-logo img  { width: 28px; height: 28px; object-fit: contain; }
+.team-name      { flex: 1; font-weight: 500; }
+.drag-handle    { cursor: grab; padding: 0 .25rem; flex-shrink: 0; }
+
+/* ── Tips Compare Table ── */
+.cell-exact  { background: rgba(26,94,42,.18)  !important; }
+.cell-close  { background: rgba(245,197,24,.2) !important; }
+.cell-medium { background: rgba(255,150,0,.15)  !important; }
+.cell-far    { background: rgba(212,0,26,.12)   !important; }
+.cell-exact.badge  { background: #1a5e2a !important; color:#fff; }
+.cell-close.badge  { background: #c49800 !important; color:#fff; }
+.cell-medium.badge { background: #e06000 !important; color:#fff; }
+.cell-far.badge    { background: #d4001a !important; color:#fff; }
+
+.rank-pill {
+  display: inline-block;
+  width: 28px; height: 28px;
+  line-height: 28px;
+  border-radius: 50%;
+  background: #f0f0f0;
+  font-weight: 700; font-size: .82rem;
+  text-align: center;
+}
+.current-rank { background: var(--bl-green); color: #fff; }
+.diff-sup     { font-size: .62rem; color: #888; }
+
+/* ── Admin Sidebar ── */
+.admin-sidebar .list-group-item.active { background: var(--bl-green); border-color: var(--bl-green); }
+.admin-sidebar .list-group-item:hover  { background: #e9f4ec; }
+
+/* ── Stat Cards ── */
+.stat-number { font-size: 2.2rem; font-weight: 700; line-height: 1.1; }
+.stat-label  { font-size: .8rem; color: #6c757d; text-transform: uppercase; letter-spacing: .5px; }
+
+/* ── Profile Avatar ── */
+.profile-avatar {
+  width: 72px; height: 72px;
+  background: var(--bl-green);
+  color: #fff;
+  font-size: 2rem; font-weight: 700;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto;
+}
+
+/* ── Footer ── */
+.footer-bar {
+  border-top: 1px solid #dee2e6;
+  background: #fff;
+  margin-top: auto;
+}
+
+/* ── Responsive tweaks ── */
+@media (max-width: 576px) {
+  .score-number { font-size: 2rem; }
+  .sortable-item { padding: .5rem .75rem; }
+}
+
+/* ── Sticky table header in tips page ── */
+.tips-compare-table thead tr th { position: sticky; top: 0; z-index: 3; }
+
+/* ── PDF / Druck ─────────────────────────────── */
+@media print {
+  /* Elemente ausblenden */
+  .navbar, .footer-bar, .no-print,
+  .btn, .alert, .admin-sidebar,
+  .dropdown, nav { display: none !important; }
+
+  /* Druckkopf einblenden */
+  .print-header { display: block !important; margin-bottom: 1rem; }
+
+  /* Seitenränder */
+  body { background: #fff !important; font-size: 11pt; }
+  .container-fluid { padding: 0 !important; }
+
+  /* Tabellen schöner */
+  .table { border-collapse: collapse !important; font-size: 10pt; }
+  .table th, .table td { border: 1px solid #ccc !important; padding: 4px 6px !important; }
+  .table-dark th { background: #333 !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  /* Zonen-Farben behalten */
+  .cl-zone    { background: #d4edda !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .el-zone    { background: #fff3cd !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .relegation-zone { background: #f8d7da !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  /* Badges sichtbar lassen */
+  .badge { border: 1px solid #999 !important; color: #000 !important; background: #eee !important;
+           -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  /* Alle versteckten Spalten anzeigen */
+  .d-none, .d-sm-none, .d-md-none, .d-lg-none, .d-xl-none,
+  .d-none.d-sm-table-cell, .d-none.d-md-table-cell,
+  .d-none.d-lg-table-cell, .d-none.d-xl-table-cell { display: table-cell !important; }
+
+  /* Seitenumbruch */
+  .card { break-inside: avoid; box-shadow: none !important; border: 1px solid #ccc !important; }
+  h4, h5 { break-after: avoid; }
+
+  /* URL nicht anzeigen */
+  a[href]::after { content: none !important; }
+}
+
+/* Print-Button Stil */
+.btn-print {
+  background: #fff;
+  border: 1px solid #dee2e6;
+  color: #495057;
+}
+.btn-print:hover { background: #f8f9fa; }
+
+/* ── Chat ─────────────────────────────────────── */
+.chat-msg { display:flex; margin-bottom:.75rem; }
+.chat-own  { justify-content:flex-end; }
+.chat-other { justify-content:flex-start; }
+
+.chat-bubble {
+  max-width:72%;
+  padding:.5rem .75rem;
+  border-radius:1rem;
+  position:relative;
+  border:none !important;
+}
+
+/* Light-Mode Bubble-Farben */
+.chat-own   .chat-bubble { background: #c8f0c8; color: #000 !important; }
+.chat-other .chat-bubble { background: #e2e2e2; color: #000 !important; }
+
+
+.chat-sender {
+  font-size:.72rem;
+  font-weight:600;
+  color:var(--bl-green);
+  margin-bottom:.15rem;
+}
+.chat-text { word-break:break-word; line-height:1.4; }
+.chat-time {
+  font-size:.67rem;
+  opacity:.6;
+  margin-top:.2rem;
+  display:flex;
+  align-items:center;
+  gap:.3rem;
+}
+.chat-own .chat-time { justify-content:flex-end; color:rgba(0,0,0,.55); }
+
+.btn-del-msg {
+  background:none; border:none; padding:0;
+  cursor:pointer; opacity:.5; line-height:1;
+  color:inherit;
+}
+.btn-del-msg:hover { opacity:1; }
+
+/* ── Bestenliste Mobile-Karten ─────────────────── */
+.lb-card {
+  padding: .75rem 1rem;
+  cursor: pointer;
+  transition: background .15s;
+  user-select: none;
+}
+.lb-card:hover  { background: #f8f9fa; }
+.lb-card-me     { background: #e8f4fd; }
+.lb-card-me:hover { background: #d6ebf9; }
+.lb-divider     { height: 1px; background: #dee2e6; }
+
+.lb-card-main {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+}
+.lb-rank        { font-size: 1.4rem; min-width: 2rem; text-align: center; }
+.lb-rank-num    { font-weight: 700; color: #6c757d; font-size: 1.1rem; }
+.lb-name        { flex: 1; font-weight: 500; font-size: 1rem; }
+.lb-score-main  { text-align: right; }
+.lb-score-num   { font-size: 1.5rem; font-weight: 700; color: var(--bl-green); line-height: 1; }
+.lb-score-label { font-size: .7rem; color: #6c757d; display: block; }
+.lb-chevron     { color: #adb5bd; font-size: .85rem; min-width: 1rem; }
+
+/* Detail-Bereich */
+.lb-card-detail {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height .3s ease, padding .2s ease;
+  padding: 0 0;
+}
+.lb-card-open .lb-card-detail {
+  max-height: 400px;
+  padding: .75rem 0 .25rem;
+}
+
+.lb-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: .5rem;
+  margin-bottom: .5rem;
+}
+.lb-detail-item {
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: .5rem;
+  padding: .4rem .6rem;
+  text-align: center;
+}
+.lb-detail-label { font-size: .65rem; color: #6c757d; margin-bottom: .15rem; }
+.lb-detail-value { font-size: .9rem; font-weight: 600; }
+
+/* Legende */
+.lb-legend-item {
+  background: #f8f9fa;
+  border-radius: .5rem;
+  padding: .5rem .75rem;
+  height: 100%;
+}
+.lb-legend-title { font-weight: 600; font-size: .85rem; margin-bottom: .15rem; }
+
+/* ── Spieltage / Live-Ergebnisse ──────────────── */
+.match-card {
+  border-radius: .75rem;
+  overflow: hidden;
+  border: 2px solid #dee2e6;
+  background: #fff;
+  transition: border-color .2s, box-shadow .2s;
+}
+.match-live    { border-color: #198754; box-shadow: 0 0 0 3px rgba(25,135,84,.15); }
+.match-done    { border-color: #6c757d; background: #f8f9fa; }
+.match-upcoming { border-color: #dee2e6; }
+
+/* Status-Balken */
+.match-status-bar {
+  padding: .3rem .75rem;
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: .3px;
+  border-bottom: 1px solid rgba(0,0,0,.08);
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+.match-badge-live {
+  color: #198754;
+  display: flex; align-items: center; gap: .4rem;
+}
+.match-badge-done     { color: #6c757d; }
+.match-badge-upcoming { color: #0d6efd; }
+.match-time-info {
+  font-size: .72rem;
+  font-weight: 700;
+  color: #198754;
+  background: #d1e7dd;
+  border-radius: 3px;
+  padding: 0 .35rem;
+}
+.match-kickoff-info {
+  font-size: .7rem;
+  font-weight: 400;
+  color: #6c757d;
+  margin-left: auto;
+}
+
+/* Live-Punkte-Animation */
+.live-dot {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: #198754;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.live-dot-sm {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #198754;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: .4; transform: scale(.8); }
+}
+
+/* Spielkörper */
+.match-body {
+  display: flex;
+  align-items: center;
+  padding: .6rem .75rem;
+  gap: .5rem;
+}
+.match-team { display: flex; align-items: center; gap: .4rem; flex: 1; }
+.match-team-left  { justify-content: flex-end; text-align: right; flex-direction: row-reverse; }
+.match-team-right { justify-content: flex-start; text-align: left; }
+
+.match-logo {
+  width: 28px; height: 28px;
+  object-fit: contain; flex-shrink: 0;
+}
+.match-team-name {
+  font-weight: 600; font-size: .82rem; line-height: 1.2;
+}
+
+/* Ergebnis-Mitte */
+.match-score-center {
+  text-align: center; min-width: 70px; flex-shrink: 0;
+}
+.match-score-ft {
+  display: flex; align-items: center; justify-content: center;
+  gap: .25rem;
+}
+.match-goal {
+  font-size: 1.5rem; font-weight: 700;
+  min-width: 1.2ch; text-align: center;
+  color: #212529;
+}
+.match-goal-win { color: var(--bl-green); }
+.match-colon    { font-size: 1.3rem; font-weight: 300; color: #adb5bd; }
+.match-score-ht {
+  font-size: .68rem; color: #6c757d;
+  margin-top: .1rem;
+}
+.match-score-dash {
+  font-size: 1rem; color: #adb5bd; font-weight: 300;
+}
+
+/* Print */
+@media print {
+  .match-live { border-color: #000 !important; }
+  .live-dot, .live-dot-sm { animation: none !important; }
+}
+
+/* ══════════════════════════════════════════════
+   DARK MODE – Bootstrap 5 CSS-Variablen überschreiben
+   ══════════════════════════════════════════════ */
+[data-theme="dark"] {
+  color-scheme: dark;
+  /* Bootstrap Basis-Variablen */
+  --bs-body-bg:          #1a1a2e;
+  --bs-body-color:       #e8e8f0;
+  --bs-border-color:     #3a3a5c;
+  --bs-card-bg:          #242438;
+  --bs-card-border-color:#3a3a5c;
+  /* Tabellen-Variablen – DAS ist der Schlüssel für Bootstrap 5 */
+  --bs-table-bg:         #242438;
+  --bs-table-color:      #e8e8f0;
+  --bs-table-border-color:#3a3a5c;
+  --bs-table-striped-bg: #2a2a40;
+  --bs-table-hover-bg:   #2e2e4a;
+  --bs-table-hover-color:#ffffff;
+  --bs-table-active-bg:  #323250;
+}
+
+[data-theme="dark"] body {
+  background: #1a1a2e !important;
+  color: #e8e8f0 !important;
+}
+
+/* ── TABELLEN: Bootstrap-Variablen + direkte Selektoren ── */
+[data-theme="dark"] .table {
+  --bs-table-bg:          #242438;
+  --bs-table-color:       #e8e8f0;
+  --bs-table-border-color:#3a3a5c;
+  --bs-table-striped-bg:  #2a2a40;
+  --bs-table-hover-bg:    #2e2e4a;
+  --bs-table-hover-color: #ffffff;
+  color: #e8e8f0;
+}
+[data-theme="dark"] .table > :not(caption) > * > * {
+  background-color: var(--bs-table-bg) !important;
+  color: var(--bs-table-color, #e8e8f0) !important;
+  border-color: #3a3a5c !important;
+}
+[data-theme="dark"] .table tbody tr:hover > * {
+  background-color: #2e2e4a !important;
+  color: #fff !important;
+}
+
+/* thead immer dunkel */
+[data-theme="dark"] .table-dark {
+  --bs-table-bg: #111120;
+  --bs-table-color: #ffffff;
+}
+[data-theme="dark"] .table-dark > * > * {
+  background-color: #111120 !important;
+  color: #ffffff !important;
+  border-color: #2a2a40 !important;
+}
+
+/* Spezielle Zeilen-Highlights */
+[data-theme="dark"] .table-warning {
+  --bs-table-bg:    #3a3000;
+  --bs-table-color: #ffd86e;
+}
+[data-theme="dark"] .table-warning > * {
+  background-color: #3a3000 !important;
+  color: #ffd86e !important;
+}
+[data-theme="dark"] .table-secondary {
+  --bs-table-bg:    #2a2a3a;
+  --bs-table-color: #c0c0d8;
+}
+[data-theme="dark"] .table-secondary > * {
+  background-color: #2a2a3a !important;
+  color: #c0c0d8 !important;
+}
+[data-theme="dark"] .table-light {
+  --bs-table-bg:    #252538;
+  --bs-table-color: #e8e8f0;
+}
+[data-theme="dark"] .table-light > * {
+  background-color: #252538 !important;
+  color: #e8e8f0 !important;
+}
+[data-theme="dark"] .table-success {
+  --bs-table-bg:    #0a2a14;
+  --bs-table-color: #70e090;
+}
+[data-theme="dark"] .table-success > * {
+  background-color: #0a2a14 !important;
+  color: #70e090 !important;
+}
+[data-theme="dark"] .table-danger {
+  --bs-table-bg:    #3a0a0a;
+  --bs-table-color: #f09090;
+}
+[data-theme="dark"] .table-danger > * {
+  background-color: #3a0a0a !important;
+  color: #f09090 !important;
+}
+[data-theme="dark"] .table-info {
+  --bs-table-bg:    #0a1e3a;
+  --bs-table-color: #90c8f0;
+}
+[data-theme="dark"] .table-info > * {
+  background-color: #0a1e3a !important;
+  color: #90c8f0 !important;
+}
+
+/* Tabellenzeilen-Zonen (Bundesliga) */
+[data-theme="dark"] tr.cl-zone > td    { background: rgba(26,94,42,.4) !important; color: #e8e8f0 !important; }
+[data-theme="dark"] tr.el-zone > td    { background: rgba(180,130,0,.3) !important; color: #e8e8f0 !important; }
+[data-theme="dark"] tr.conf-zone > td  { background: rgba(0,60,150,.3) !important; color: #e8e8f0 !important; }
+[data-theme="dark"] tr.relegation-zone > td { background: rgba(180,0,0,.35) !important; color: #e8e8f0 !important; }
+
+/* ── KARTEN ── */
+[data-theme="dark"] .card {
+  background: #242438 !important;
+  border-color: #3a3a5c !important;
+  color: #e8e8f0;
+}
+[data-theme="dark"] .card-header  { border-color: #3a3a5c !important; }
+[data-theme="dark"] .card-footer  { background: #1e1e32 !important; border-color: #3a3a5c !important; color: #a0a0c0; }
+[data-theme="dark"] .card-body    { color: #e8e8f0; }
+
+/* ── FORMULARE ── */
+[data-theme="dark"] .form-control,
+[data-theme="dark"] .form-select,
+[data-theme="dark"] textarea,
+[data-theme="dark"] input:not([type=submit]):not([type=button]):not([type=range]) {
+  background: #1e1e32 !important;
+  color: #e8e8f0 !important;
+  border-color: #4a4a6a !important;
+}
+[data-theme="dark"] .form-control:focus,
+[data-theme="dark"] .form-select:focus {
+  background: #252540 !important;
+  color: #fff !important;
+  border-color: var(--bl-green) !important;
+}
+[data-theme="dark"] .form-text      { color: #8888aa !important; }
+[data-theme="dark"] .input-group-text {
+  background: #1e1e32 !important;
+  border-color: #4a4a6a !important;
+  color: #a0a0c0 !important;
+}
+
+/* ── ALERTS ── */
+[data-theme="dark"] .alert-info     { background:#0d2744 !important; border-color:#1a4a7a; color:#8ac8f0; }
+[data-theme="dark"] .alert-warning  { background:#3a2800 !important; border-color:#7a5000; color:#ffd080; }
+[data-theme="dark"] .alert-success  { background:#0a2a14 !important; border-color:#1a6030; color:#70e090; }
+[data-theme="dark"] .alert-danger   { background:#3a0a0a !important; border-color:#7a1a1a; color:#f09090; }
+[data-theme="dark"] .alert-secondary{ background:#1e1e32 !important; border-color:#3a3a5c; color:#a0a0c0; }
+[data-theme="dark"] .alert-light    { background:#1e1e32 !important; border-color:#3a3a5c; color:#e8e8f0; }
+
+/* ── TEXT ── */
+[data-theme="dark"] .text-muted     { color: #8888aa !important; }
+[data-theme="dark"] .text-dark      { color: #e8e8f0 !important; }
+[data-theme="dark"] .text-secondary { color: #a0a0c0 !important; }
+[data-theme="dark"] .text-body      { color: #e8e8f0 !important; }
+
+/* ── BADGES ── */
+[data-theme="dark"] .badge.bg-secondary { background: #4a4a6a !important; color: #e8e8f0 !important; }
+[data-theme="dark"] .badge.bg-light     { background: #3a3a5c !important; color: #e8e8f0 !important; }
+[data-theme="dark"] .badge.text-dark    { color: #e8e8f0 !important; }
+[data-theme="dark"] .badge.bg-warning.text-dark { color: #000 !important; }
+
+/* ── DROPDOWN ── */
+[data-theme="dark"] .dropdown-menu     { background: #242438 !important; border-color: #3a3a5c !important; }
+[data-theme="dark"] .dropdown-item     { color: #e8e8f0 !important; }
+[data-theme="dark"] .dropdown-item:hover { background: #2e2e4a !important; color: #fff !important; }
+[data-theme="dark"] .dropdown-item.active { background: var(--bl-green) !important; }
+[data-theme="dark"] .dropdown-divider  { border-color: #3a3a5c; }
+
+/* ── LIST GROUP ── */
+[data-theme="dark"] .list-group-item {
+  background: #242438 !important;
+  border-color: #3a3a5c !important;
+  color: #e8e8f0 !important;
+}
+[data-theme="dark"] .list-group-item:hover    { background: #2e2e48 !important; }
+[data-theme="dark"] .list-group-item.active   { background: var(--bl-green) !important; color: #fff !important; }
+[data-theme="dark"] .list-group-item-action   { color: #e8e8f0 !important; }
+
+/* ── MODAL ── */
+[data-theme="dark"] .modal-content  { background: #242438 !important; color: #e8e8f0 !important; border-color: #3a3a5c !important; }
+[data-theme="dark"] .modal-header,
+[data-theme="dark"] .modal-footer   { border-color: #3a3a5c !important; }
+
+/* ── BESTENLISTE KARTEN (Mobile) ── */
+[data-theme="dark"] .lb-card        { background: #242438 !important; color: #e8e8f0; }
+[data-theme="dark"] .lb-card:hover  { background: #2e2e48 !important; }
+[data-theme="dark"] .lb-card-me     { background: #142240 !important; }
+[data-theme="dark"] .lb-divider     { background: #3a3a5c; }
+[data-theme="dark"] .lb-rank-num    { color: #a0a0c0 !important; }
+[data-theme="dark"] .lb-score-label { color: #8888aa !important; }
+[data-theme="dark"] .lb-detail-item { background: #1e1e32 !important; border-color: #3a3a5c !important; }
+[data-theme="dark"] .lb-detail-label{ color: #8888aa !important; }
+[data-theme="dark"] .lb-detail-value{ color: #e8e8f0 !important; }
+[data-theme="dark"] .lb-legend-item { background: #1e1e32 !important; }
+[data-theme="dark"] .lb-legend-title{ color: #e8e8f0 !important; }
+
+/* ── SORTIERBARE ITEMS ── */
+[data-theme="dark"] .sortable-item  { background: #242438 !important; border-color: #3a3a5c !important; color: #e8e8f0 !important; }
+[data-theme="dark"] .sortable-item:hover { background: #2e2e48 !important; }
+
+/* ── SCORE-ANZEIGE ── */
+[data-theme="dark"] .score-display  { background: linear-gradient(135deg,#0a2a14,#1a5e2a) !important; color: #fff !important; }
+
+/* ── CHAT ── */
+  background: #242438 !important;
+  border-color: #3a3a5c !important;
+  color: #e8e8f0 !important;
+}
+
+/* ── SPIELKARTEN ── */
+[data-theme="dark"] .match-card     { background: #242438 !important; border-color: #3a3a5c !important; color: #e8e8f0; }
+[data-theme="dark"] .match-card.match-done { background: #1e1e32 !important; }
+[data-theme="dark"] .match-team-name{ color: #e8e8f0 !important; }
+[data-theme="dark"] .match-goal     { color: #e8e8f0 !important; }
+[data-theme="dark"] .match-colon    { color: #6666aa !important; }
+[data-theme="dark"] .match-score-ht { color: #8888aa !important; }
+[data-theme="dark"] .match-badge-done     { color: #8888aa !important; }
+[data-theme="dark"] .match-badge-upcoming { color: #7090d0 !important; }
+
+/* ── FOOTER ── */
+[data-theme="dark"] .footer-bar     { background: #141428 !important; border-color: #3a3a5c !important; color: #8888aa !important; }
+[data-theme="dark"] .footer-bar a   { color: #6688cc !important; }
+
+/* ── SONSTIGES ── */
+[data-theme="dark"] .progress       { background: #1e1e32 !important; }
+[data-theme="dark"] hr              { border-color: #3a3a5c !important; opacity: 1; }
+[data-theme="dark"] code            { background: #1e1e32 !important; color: #f08060 !important; }
+[data-theme="dark"] .border         { border-color: #3a3a5c !important; }
+[data-theme="dark"] .border-top,
+[data-theme="dark"] .border-bottom  { border-color: #3a3a5c !important; }
+[data-theme="dark"] a:not(.btn):not(.nav-link):not(.list-group-item):not(.dropdown-item) { color: #6699ff; }
+[data-theme="dark"] a:hover:not(.btn):not(.nav-link):not(.list-group-item):not(.dropdown-item) { color: #88bbff; }
+
+/* Theme-Toggle-Button */
+.btn-theme {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,.3);
+  color: #fff;
+  padding: .25rem .5rem;
+  border-radius: .375rem;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.btn-theme:hover { background: rgba(255,255,255,.15); }
+
+
+
+/* ── Dark Mode: Alle Tipps Tabelle ──────────── */
+[data-theme="dark"] .cell-exact  { background: rgba(26,94,42,.45)  !important; }
+[data-theme="dark"] .cell-close  { background: rgba(245,197,24,.35) !important; }
+[data-theme="dark"] .cell-medium { background: rgba(255,150,0,.3)   !important; }
+[data-theme="dark"] .cell-far    { background: rgba(212,0,26,.35)   !important; }
+
+/* Sticky Spalten im Dark Mode */
+[data-theme="dark"] td[style*="sticky"],
+[data-theme="dark"] td[style*="position:sticky"] {
+  background: #1a1a2e !important;
+}
+
+/* Team-Logo: weißer Hintergrund entfernen */
+[data-theme="dark"] .team-logo,
+[data-theme="dark"] img[style*="width:16px"],
+[data-theme="dark"] img[style*="width:18px"],
+[data-theme="dark"] img[style*="width:28px"] {
+  filter: brightness(.9) contrast(1.1);
+  border-radius: 2px;
+  mix-blend-mode: normal;
+}
+/* Weiße Logo-Hintergründe kaschieren */
+[data-theme="dark"] td img, [data-theme="dark"] th img {
+  background: transparent;
+  border-radius: 2px;
+}
+
+/* Rang-Pill im Dark Mode gut lesbar */
+[data-theme="dark"] .rank-pill {
+  background: #2e2e4a;
+  color: #e8e8f0;
+  border: 1px solid #4a4a6a;
+}
+[data-theme="dark"] .current-rank {
+  background: var(--bl-green);
+  color: #fff;
+  border-color: var(--bl-green);
+}
+[data-theme="dark"] .diff-sup { color: #9090bb; }
+
+/* Abweichungs-Farben im Dark Mode */
+[data-theme="dark"] .text-success { color: #5ce07a !important; }
+[data-theme="dark"] .text-warning { color: #ffd060 !important; }
+[data-theme="dark"] .text-danger  { color: #f08080 !important; }
+
+/* Table-responsive Scrollbar im Dark Mode */
+[data-theme="dark"] .table-responsive::-webkit-scrollbar { height: 6px; }
+[data-theme="dark"] .table-responsive::-webkit-scrollbar-track { background: #1a1a2e; }
+[data-theme="dark"] .table-responsive::-webkit-scrollbar-thumb { background: #4a4a6a; border-radius: 3px; }
+
+/* Sticky Spalten: Light & Dark */
+.tips-sticky-col  { background: #fff; }
+.tips-sticky-col2 { background: #fff; }
+[data-theme="dark"] .tips-sticky-col  { background: #242438 !important; color: #e8e8f0 !important; }
+[data-theme="dark"] .tips-sticky-col2 { background: #242438 !important; }
+/* Hover-Zustand für sticky Spalten */
+tr:hover .tips-sticky-col,
+tr:hover .tips-sticky-col2 { background: #f8f9fa; }
+[data-theme="dark"] tr:hover .tips-sticky-col,
+[data-theme="dark"] tr:hover .tips-sticky-col2 { background: #2e2e4a !important; }
+
+/* ── Emoji-Picker ────────────────────────────── */
+.btn-emoji-toggle {
+  position: absolute;
+  right: .5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  opacity: .7;
+  transition: opacity .15s, transform .15s;
+}
+.btn-emoji-toggle:hover { opacity: 1; transform: translateY(-50%) scale(1.15); }
+
+.emoji-picker {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: .75rem;
+  box-shadow: 0 8px 24px rgba(0,0,0,.15);
+  z-index: 100;
+  padding: .5rem;
+  max-height: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+}
+.emoji-search-wrap input {
+  border-radius: .5rem;
+  font-size: .85rem;
+}
+.emoji-categories {
+  display: flex;
+  gap: .25rem;
+  flex-wrap: wrap;
+}
+.emoji-cat {
+  background: #f0f0f0;
+  border: none;
+  border-radius: .5rem;
+  padding: .15rem .5rem;
+  font-size: .75rem;
+  cursor: pointer;
+  transition: background .15s;
+  white-space: nowrap;
+}
+.emoji-cat:hover  { background: #e0e0e0; }
+.emoji-cat.active { background: var(--bl-green); color: #fff; }
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(2.2rem, 1fr));
+  gap: .15rem;
+  overflow-y: auto;
+  flex: 1;
+  padding: .2rem 0;
+}
+.emoji-btn {
+  background: none;
+  border: none;
+  border-radius: .4rem;
+  font-size: 1.35rem;
+  cursor: pointer;
+  padding: .2rem;
+  transition: background .1s, transform .1s;
+  line-height: 1.2;
+  text-align: center;
+}
+.emoji-btn:hover { background: #f0f0f0; transform: scale(1.2); }
+
+/* Dark Mode */
+[data-theme="dark"] .emoji-picker {
+  background: #2a2a40;
+  border-color: #4a4a6a;
+  box-shadow: 0 8px 24px rgba(0,0,0,.4);
+}
+[data-theme="dark"] .emoji-cat         { background: #1e1e32; color: #e8e8f0; }
+[data-theme="dark"] .emoji-cat:hover   { background: #2e2e4a; }
+[data-theme="dark"] .emoji-cat.active  { background: var(--bl-green); color: #fff; }
+[data-theme="dark"] .emoji-btn:hover   { background: #3a3a5a; }
+
+/* ── pCloud Medien-Galerie ───────────────────── */
+.gallery-thumb { text-decoration: none; color: inherit; }
+.gallery-img-wrap {
+  background: #f0f0f0;
+  border-radius: .5rem;
+  overflow: hidden;
+  transition: transform .15s, box-shadow .15s;
+}
+.gallery-thumb:hover .gallery-img-wrap {
+  transform: scale(1.04);
+  box-shadow: 0 4px 16px rgba(0,0,0,.2);
+}
+.gallery-img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+[data-theme="dark"] .gallery-img-wrap { background: #2a2a40; }
+
+/* ── Chat Reaktionen ─────────────────────── */
+.reaction-group { display:flex;gap:.25rem;align-items:center }
+.btn-react {
+  background:none;border:1px solid #dee2e6;border-radius:1rem;
+  padding:.1rem .45rem;font-size:.8rem;cursor:pointer;
+  transition:background .15s,border-color .15s;line-height:1.4;
+  color:inherit;
+}
+.btn-react:hover        { background:#f0f0f0;border-color:#aaa }
+.btn-react.active       { background:#d4edda;border-color:#28a745;font-weight:600 }
+.react-count            { font-size:.75rem;opacity:.8 }
+[data-theme="dark"] .btn-react       { border-color:#555;color:#ccc }
+[data-theme="dark"] .btn-react:hover { background:#3a3a5a }
+[data-theme="dark"] .btn-react.active{ background:#1a3a2a;border-color:#4caf50 }
+
+/* ── Tipp-Konfidenz ─────────────────────── */
+.confidence-badge {
+  display:inline-block;font-size:.65rem;padding:.1rem .35rem;
+  border-radius:.25rem;margin-left:.3rem;vertical-align:middle;
+  font-weight:600;
+}
+.conf-agree  { background:#d4edda;color:#155724 }
+.conf-neutral{ background:#fff3cd;color:#856404 }
+.conf-differ { background:#f8d7da;color:#721c24 }
+
+/* ── Deadline Countdown ─────────────────── */
+.deadline-countdown {
+  font-size:.8rem;font-weight:600;
+  padding:.2rem .5rem;border-radius:.4rem;display:inline-block;
+}
+.countdown-ok     { background:#d4edda;color:#155724 }
+.countdown-warn   { background:#fff3cd;color:#856404 }
+.countdown-urgent { background:#f8d7da;color:#721c24;animation:pulse 1s infinite }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+
+/* ── Chat Zitat (Reply) ─────────────────────── */
+
+/* ═══════════════════════════════════════════════════════════
+   CHAT — Farbkonzept
+   Light Mode:
+     Eigene Bubble:   Dunkelgrün (#2d7a47), weißer Text
+     Fremde Bubble:   Hellgrau (#f2f4f6), dunkelgrauer Text
+     Zitat (eigene):  Weißer Streifen mit 20% Deckkraft
+     Zitat (fremde):  Mittelgrauer Streifen (#e0e4e8)
+   Dark Mode:
+     Eigene Bubble:   Dunkelgrün (#1e6b38), weißer Text
+     Fremde Bubble:   Dunkles Blaugrau (#252535), heller Text
+     Zitat (eigene):  Weiß 12% Deckkraft
+     Zitat (fremde):  Weiß 6% Deckkraft
+   ═══════════════════════════════════════════════════════════ */
+
+/* Basis-Bubbles ─────────────────────────────────────────── */
+
+
+.chat-sender      { font-size:.72rem; font-weight:600; color:#2d7a47; margin-bottom:.15rem; }
+.chat-text        { word-break:break-word; line-height:1.4; }
+.chat-time        { font-size:.67rem; opacity:.65; margin-top:.2rem; display:flex; align-items:center; gap:.3rem; }
+.chat-own .chat-time { justify-content:flex-end; color:rgba(0,0,0,.55); opacity:1; }
+
+.btn-reply {
+  opacity: .45; transition: opacity .15s;
+  background: none; border: none; padding: 0;
+  cursor: pointer; font-size: .75rem;
+}
+.chat-own .btn-reply   { color: rgba(0,0,0,.5); }
+.chat-other .btn-reply { color: #555; }
+.btn-reply:hover       { opacity: 1; }
+
+/* Lösch-Button ──────────────────────────────────────────── */
+.btn-del-msg {
+  background: none; border: none; padding: 0;
+  cursor: pointer; opacity: .4; line-height: 1; color: inherit;
+}
+.btn-del-msg:hover { opacity: .8; }
+
+/* ── DARK MODE ────────────────────────────────────────────── */
+[data-theme="dark"] #chat-messages { background: #141428 !important; }
+
+[data-theme="dark"] .chat-own .chat-bubble {
+  background: #1e6b38 !important;
+  color: #ffffff !important;
+}
+[data-theme="dark"] .chat-own .chat-text   { color: #fff !important; }
+[data-theme="dark"] .chat-own .chat-time   { color: rgba(255,255,255,.65) !important; opacity:1 !important; }
+[data-theme="dark"] .chat-own .chat-sender { color: rgba(255,255,255,.9) !important; }
+[data-theme="dark"] .chat-own .btn-reply   { color: rgba(255,255,255,.55) !important; }
+[data-theme="dark"] .chat-own .btn-react   { color: rgba(255,255,255,.75) !important; }
+[data-theme="dark"] .chat-own .btn-del-msg { color: rgba(255,255,255,.5) !important; }
+
+[data-theme="dark"] .chat-own .chat-quote {
+  background: rgba(255,255,255,.12) !important;
+  border-left-color: rgba(255,255,255,.5) !important;
+}
+[data-theme="dark"] .chat-own .chat-quote .reply-sender { color: rgba(255,255,255,.95) !important; }
+[data-theme="dark"] .chat-own .chat-quote .reply-text   { color: rgba(255,255,255,.65) !important; }
+
+[data-theme="dark"] .chat-other .chat-bubble {
+  background: #252535 !important;
+  border-color: #383850 !important;
+  color: #e8e8f0 !important;
+}
+[data-theme="dark"] .chat-other .chat-text   { color: #e8e8f0 !important; }
+[data-theme="dark"] .chat-other .chat-sender { color: #72c48a !important; }
+[data-theme="dark"] .chat-other .chat-time   { color: #8888aa !important; }
+[data-theme="dark"] .chat-other .btn-reply   { color: #8888aa !important; }
+[data-theme="dark"] .chat-other .btn-react   { color: #aaaacc !important; }
+[data-theme="dark"] .chat-other .btn-del-msg { color: #8888aa !important; }
+
+[data-theme="dark"] .chat-other .chat-quote {
+  background: rgba(255,255,255,.07) !important;
+  border-left-color: #72c48a !important;
+}
+[data-theme="dark"] .chat-other .chat-quote .reply-sender { color: #72c48a !important; }
+[data-theme="dark"] .chat-other .chat-quote .reply-text   { color: #aaa !important; }
+
+[data-theme="dark"] #replyPreview {
+  background: #1a2a1e !important;
+  border-left-color: #72c48a !important;
+}
+[data-theme="dark"] #replyPreviewName { color: #72c48a !important; }
+[data-theme="dark"] #replyPreviewText { color: #aaa !important; }
+
+[data-theme="dark"] #chat-input {
+  background: #1e1e2e !important;
+  color: #eee !important;
+  border-color: #444 !important;
+}
+
+/* ── Chat Quote (Reply-Blöcke in Bubbles) ─────────────────
+   Inline-Styles in chat.html setzen Textfarben —
+   hier nur Hintergrund + Rahmen                            */
+.chat-quote {
+  border-radius: .3rem;
+  padding: .3rem .6rem;
+  margin-bottom: .4rem;
+  font-size: .8rem;
+  line-height: 1.35;
+}
+.chat-own   .chat-quote {
+  background: rgba(0,0,0,.1) !important;
+  border-left: 3px solid rgba(0,0,0,.3) !important;
+}
+.chat-other .chat-quote {
+  background: rgba(0,0,0,.07) !important;
+  border-left: 3px solid #6b9e7a !important;
+}
+/* Textfarben: explizit mit !important gegen Bootstrap-Overrides */
+.chat-own   .chat-quote .reply-sender { color: rgba(0,0,0,.85) !important; font-weight:600; }
+.chat-own   .chat-quote .reply-text   { color: rgba(0,0,0,.6) !important; }
+.chat-other .chat-quote .reply-sender { color: #2d5e3a !important;               font-weight:600; }
+.chat-other .chat-quote .reply-text   { color: #333 !important; }
+
+/* Dark Mode Quotes */
+[data-theme="dark"] .chat-own   .chat-quote { background: rgba(0,0,0,.25) !important; border-left-color: rgba(255,255,255,.4) !important; }
+[data-theme="dark"] .chat-other .chat-quote { background: rgba(255,255,255,.06) !important; border-left-color: #72c48a !important; }
+[data-theme="dark"] .chat-other .chat-quote .reply-sender { color: #72c48a !important; }
+[data-theme="dark"] .chat-other .chat-quote .reply-text   { color: #bbb !important; }
+
+/* Reply-Vorschau im Eingabefeld */
+#replyPreview {
+  border-left: 3px solid #2d7a47 !important;
+  background: #eaf3ed !important;
+  border-radius: .3rem;
+}
+#replyPreviewName { color: #2d5e3a !important; font-weight:600; font-size:.8rem; }
+#replyPreviewText { color: #333 !important; font-size:.8rem; }
+[data-theme="dark"] #replyPreview      { background: #1a2a1e !important; border-color: #72c48a !important; }
+[data-theme="dark"] #replyPreviewName  { color: #72c48a !important; }
+[data-theme="dark"] #replyPreviewText  { color: #aaa !important; }
+
+/* Verlaufstabelle: Sticky Spielerspalte Dark Mode */
+[data-theme="dark"] .verlauf-sticky-col {
+  background: #1a1a2e !important;
+  border-right-color: #444 !important;
+}
+
+/* ── CSS-Tooltip für Spielernamen (Hover) ───────────────────── */
+.tippcup-tooltip {
+  position: relative;
+  cursor: default;
+  text-decoration: underline dotted #999;
+  text-underline-offset: 3px;
+}
+.tippcup-tooltip::after {
+  content: attr(data-tooltip);
+  position: fixed;
+  bottom: auto;
+  top: var(--tt-top, auto);
+  left: var(--tt-left, 50%);
+  transform: translateX(-50%);
+  background: #212529;
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: .8rem;
+  font-weight: 400;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .15s ease;
+  z-index: 9999;
+  box-shadow: 0 2px 8px rgba(0,0,0,.35);
+}
+.tippcup-tooltip::before {
+  content: '';
+  position: fixed;
+  bottom: auto;
+  top: var(--tt-arrow-top, auto);
+  left: var(--tt-left, 50%);
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #212529;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .15s ease;
+  z-index: 9999;
+}
+.tippcup-tooltip:hover::after,
+.tippcup-tooltip:hover::before {
+  opacity: 1;
+}
+
+/* Dark Mode */
+[data-theme="dark"] .tippcup-tooltip::after {
+  background: #f8f9fa;
+  color: #212529;
+  box-shadow: 0 2px 8px rgba(0,0,0,.5);
+}
+[data-theme="dark"] .tippcup-tooltip::before {
+  border-top-color: #f8f9fa;
+}
+
+/* ── Sticky-Spalten in scrollbaren Tabellen ─────────────────── */
+/* tips.html: Team + Ist-Spalte */
+.tips-sticky-col {
+  background: var(--bs-body-bg, #fff);
+  white-space: nowrap;
+}
+.tips-sticky-col2 {
+  background: var(--bs-body-bg, #fff);
+}
+[data-theme="dark"] .tips-sticky-col,
+[data-theme="dark"] .tips-sticky-col2 {
+  background: #1a1a2e;
+}
+/* Verlauf: Spieler-Spalte */
+[data-theme="dark"] .verlauf-sticky-col {
+  background: #1a1a2e !important;
+  border-right-color: #444 !important;
+}
+
+/* ── Verlauf: Responsive Chart-Höhe ──────────────────────────── */
+.chart-responsive-container {
+  position: relative;
+  height: 420px;
+}

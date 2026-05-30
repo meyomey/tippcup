@@ -1,0 +1,95 @@
+{% extends "admin/base.html" %}
+{% block title %}Admin – Benutzer {% if edit_user %}bearbeiten{% else %}anlegen{% endif %}{% endblock %}
+
+{% block admin_content %}
+<h4 class="mb-4">
+  <i class="bi bi-person-{% if edit_user %}gear{% else %}plus{% endif %} me-2"></i>
+  Benutzer {% if edit_user %}bearbeiten: <em>{{ edit_user.username }}</em>{% else %}anlegen{% endif %}
+</h4>
+
+<div class="card shadow-sm" style="max-width:500px">
+  <div class="card-body">
+    <form method="POST">
+      {% if not edit_user %}
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Benutzername *</label>
+        <input type="text" name="username" class="form-control" required
+               pattern="[a-zA-Z0-9._-]+" title="Nur Buchstaben, Zahlen, Punkt, Unterstrich, Bindestrich">
+        <div class="form-text">Nur Buchstaben, Zahlen und . _ -</div>
+      </div>
+      {% endif %}
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Spielername <span class="text-muted fw-normal small">(Anzeigename)</span></label>
+        <input type="text" name="display_name" class="form-control"
+               value="{{ edit_user.display_name if edit_user else '' }}"
+               placeholder="{{ edit_user.username if edit_user else 'z.B. Heiko' }}">
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Voller Name</label>
+        <input type="text" name="full_name" class="form-control"
+               value="{{ edit_user.full_name if edit_user and edit_user.full_name else '' }}"
+               placeholder="Vor- und Nachname">
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Lieblingsverein</label>
+        <input type="text" name="favorite_club" class="form-control"
+               value="{{ edit_user.favorite_club if edit_user and edit_user.favorite_club else '' }}"
+               placeholder="z.B. Borussia Dortmund">
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">E-Mail-Adresse</label>
+        <input type="email" name="email" class="form-control"
+               value="{{ edit_user.email if edit_user and edit_user.email else '' }}"
+               placeholder="max@beispiel.de">
+        <div class="form-text">Wird für Rundbriefe benötigt.</div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Mobilnummer</label>
+        <input type="tel" name="mobile" class="form-control"
+               value="{{ edit_user.mobile if edit_user and edit_user.mobile else '' }}"
+               placeholder="+49 170 1234567">
+        <div class="form-text">Optional. Nicht öffentlich sichtbar.</div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">
+          Passwort {% if edit_user %}<span class="text-muted fw-normal">(leer = nicht ändern)</span>{% else %}*{% endif %}
+        </label>
+        <input type="text" name="password" class="form-control"
+               {% if not edit_user %}required{% endif %}
+               autocomplete="new-password" placeholder="Mind. 6 Zeichen">
+      </div>
+
+      <div class="mb-3">
+        <div class="form-check">
+          <input type="checkbox" name="is_admin" class="form-check-input" id="isAdmin"
+                 {% if edit_user and edit_user.is_admin %}checked{% endif %}>
+          <label class="form-check-label" for="isAdmin">Administrator</label>
+        </div>
+      </div>
+
+      {% if edit_user %}
+      <div class="mb-4">
+        <div class="form-check">
+          <input type="checkbox" name="is_active" class="form-check-input" id="isActive"
+                 {% if edit_user.is_active %}checked{% endif %}>
+          <label class="form-check-label" for="isActive">Aktiv (kann sich einloggen)</label>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-bundesliga">
+          <i class="bi bi-save me-1"></i>Speichern
+        </button>
+        <a href="{{ url_for('admin_users') }}" class="btn btn-outline-secondary">Abbrechen</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

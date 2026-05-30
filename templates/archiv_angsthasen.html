@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Archiv Angsthasen{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="mb-0"><i class="bi bi-emoji-dizzy me-2"></i>Angsthasen – Archiv</h4>
+  <a href="{{ url_for('archiv') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Archiv
+  </a>
+</div>
+
+{% if not seasons %}
+<div class="card shadow-sm">
+  <div class="card-body text-center py-5 text-muted">
+    <i class="bi bi-emoji-dizzy fs-1"></i>
+    <h5 class="mt-3">Noch keine Angsthasen-Daten vorhanden</h5>
+    {% if session.get('is_admin') %}
+    <a href="{{ url_for('admin_archiv_import') }}" class="btn btn-bundesliga mt-2">
+      <i class="bi bi-upload me-2"></i>CSV importieren
+    </a>
+    {% endif %}
+  </div>
+</div>
+{% else %}
+
+<div class="card shadow-sm mb-3">
+  <div class="card-body py-2">
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+      <span class="text-muted small fw-semibold">Saison:</span>
+      {% for s in seasons %}
+      <a href="{{ url_for('archiv_angsthasen', season=s) }}"
+         class="btn btn-sm {{ 'btn-bundesliga' if s == season_param else 'btn-outline-secondary' }}">
+        {{ s }}
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% if rows and meta %}
+<div class="card shadow-sm">
+  <div class="card-header bg-bundesliga text-white d-flex align-items-center justify-content-between">
+    <span><i class="bi bi-emoji-dizzy me-2"></i>Angsthasen {{ season_param }}</span>
+    <small class="opacity-75">
+      BL1: n={{ meta.n_1l }} k={{ meta.k_1l }} &nbsp;·&nbsp;
+      BL2: n={{ meta.n_2l }} k={{ meta.k_2l }}
+    </small>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover table-sm mb-0 align-middle">
+      <thead class="table-light">
+        <tr>
+          <th class="text-center" style="width:3rem">#</th>
+          <th>Name</th>
+          <th class="text-center" title="Abweichung BL1">Abw. BL1</th>
+          <th class="text-center" title="Abweichung BL2">Abw. BL2</th>
+          <th class="text-center fw-bold" title="Gesamtabweichung">Abw. ges.</th>
+          <th class="text-center d-none d-md-table-cell" title="Gewichtete Abweichung">Abw. gew.</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set max_rang = rows|length %}
+        {% for row in rows %}
+        <tr class="{{ 'table-success fw-bold' if row.rang == 1 else ('table-danger' if row.rang == max_rang else '') }}">
+          <td class="text-center">
+            {% if row.rang == 1 %}😎
+            {% elif row.rang == max_rang %}😱
+            {% else %}<span class="text-muted">{{ row.rang }}</span>{% endif %}
+          </td>
+          <td>
+            {% if row.user_id %}
+            <span class="fw-semibold">{{ row.display_name or row.username }}</span>
+            {% else %}
+            <span class="text-muted">{{ row.name }}</span>
+            {% endif %}
+          </td>
+          <td class="text-center">{{ row.abw_1l }}</td>
+          <td class="text-center">{{ row.abw_2l }}</td>
+          <td class="text-center fw-semibold">{{ row.abw_ges }}</td>
+          <td class="text-center d-none d-md-table-cell text-muted">
+            {{ '%.4f' | format(row.abw_gew) if row.abw_gew else '–' }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}
