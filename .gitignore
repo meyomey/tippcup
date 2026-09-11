@@ -24,3 +24,8 @@ backups/
 
 # Lokale Umgebungsvariablen
 .env
+
+# Test-Artefakte
+tests/_test_tippspiel.db
+.pytest_cache/
+*.egg-info/

@@ -85,6 +85,13 @@ für den Einstieg in einen neuen Chat.
 8. `tippspiel.db`, `*.env`, echte Konfigurationsdateien mit Zugangsdaten
    NIE committen — siehe `.gitignore` im Projekt-Root. Vor jedem
    `git add`/Commit kurz `git status` prüfen.
+9. **Es gibt jetzt eine Testsuite** (`tests/`, pytest, 30 Tests) —
+   nach größeren Änderungen an `calculate_scores_for_season`,
+   `autofill_missing_predictions`, `/predict`, Login/CSRF oder
+   Admin-Berechtigungen IMMER `pytest` laufen lassen, bevor der Code
+   als fertig gilt. Bei neuen kritischen Funktionen einen passenden
+   Test in der jeweiligen `tests/test_*.py`-Datei ergänzen (siehe
+   `tests/README.md`).
 
 ## Arbeitsweise
 

@@ -74,6 +74,15 @@ Fixes unten. Alle Fixes wurden gegen eine Test-DB verifiziert
 ### Repository
 - Projekt erstmals als Git-Repository initialisiert und nach GitHub
   übertragen (siehe README.md / .gitignore).
+- `vendor/`-Verzeichnis mit pywebpush 1.14.1 + Abhängigkeiten ergänzt
+  (gezielt für Python 3.9 / manylinux2014_x86_64 gebaut, siehe
+  `vendor/VENDOR_INFO.md`).
+- **Automatisierte Testsuite (pytest) eingeführt** – 30 Tests in
+  `tests/`, decken die im Audit als kritisch identifizierten Bereiche ab:
+  Punkteberechnung (inkl. Regressionstest für den Scoring-Bug oben),
+  Tipp-Validierung, Login/CSRF, Admin-Berechtigungen,
+  Ranglisten-Determinismus, Admin-Impersonation-Randfall. Siehe
+  `tests/README.md` für Details zum Ausführen.
 
 ---
 
