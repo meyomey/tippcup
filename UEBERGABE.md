@@ -5,6 +5,12 @@ für den Einstieg in einen neuen Chat.
 
 ## Wichtigste Punkte
 
+- **Automatisches tägliches Backup** (September 2026): läuft entweder
+  passiv über Seitenaufrufe mit (kein Cron nötig) oder optional exakt
+  getimed über `/cron/backup/<token>` (Token in Admin → Backup-Seite).
+  Landet in `backups/` (nicht im Git-Repo), Aufbewahrung konfigurierbar.
+  Siehe CHANGELOG.md.
+
 - **Projekt liegt jetzt auf GitHub** (siehe README.md für Repo-Link und
   Setup-Anleitung). Lokales Arbeitsverzeichnis in einer neuen Chat-Session
   jetzt per `git clone` statt ZIP-Upload möglich (ZIP-Upload funktioniert

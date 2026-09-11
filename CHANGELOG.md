@@ -4,7 +4,43 @@ Alle wesentlichen Änderungen am Tippcup-Projekt werden hier dokumentiert.
 
 ---
 
-## [Aktuell] – September 2026 – Sicherheits- & Fairness-Audit
+## [Aktuell] – September 2026 – Automatisches tägliches Backup
+
+Neue Funktion: automatische, tägliche Backups (DB + Medien + Config)
+landen als ZIP im neuen `backups/`-Verzeichnis (nicht im Git-Repo,
+siehe `.gitignore`).
+
+### Funktionsweise
+- **Zwei Trigger-Wege, beide nutzbar:**
+  1. **Ohne jede Konfiguration:** Bei jedem Dashboard-Aufruf eines
+     beliebigen Users wird geprüft, ob das letzte automatische Backup
+     ≥23h her ist – falls ja, läuft es im Hintergrund (eigener Thread,
+     blockiert den Seitenaufruf nicht). Funktioniert, solange täglich
+     mindestens einmal irgendjemand die Seite besucht – kein Cron nötig.
+  2. **Optional, für einen exakten Zeitpunkt:** Ein neuer Endpoint
+     `/cron/backup/<token>` (Token in der Admin-Backup-Seite sichtbar,
+     regenerierbar) kann von Plesk „Geplante Aufgaben" (curl) oder einem
+     externen Dienst wie cron-job.org einmal täglich aufgerufen werden.
+     Sessionlos, daher CSRF-Schutz-Ausnahme (wie Telegram-Webhook).
+- **Aufbewahrung konfigurierbar** (Standard: 14 Tage), ältere
+  automatische Backups werden automatisch gelöscht.
+- **Admin-UI** (`/admin/backup/page`): Ein/Aus-Schalter, Aufbewahrungsdauer,
+  Zeitpunkt des letzten Versuchs UND des letzten *erfolgreichen* Laufs
+  (getrennt sichtbar, falls ein Lauf fehlschlägt), Liste vorhandener
+  Auto-Backups mit Download/Löschen, „Jetzt sofort erstellen"-Button.
+- Der bestehende manuelle Backup-Download (`/admin/backup`) funktioniert
+  unverändert weiter – beide Wege nutzen jetzt dieselbe ZIP-Bau-Funktion
+  (`build_backup_zip_bytes`), um Doppelcode zu vermeiden.
+- 12 neue Tests in `tests/test_backup.py` (Trigger-Zeitfenster, Force,
+  Deaktivierung, Pruning, Cron-Token, Path-Traversal-Schutz beim
+  Download, Admin-Berechtigung).
+- Kleiner Testsuite-Fix: Hintergrund-Backup-Trigger wird bei
+  `app.config['TESTING']=True` übersprungen (sonst Race Condition mit
+  der schnell wechselnden Test-DB zwischen einzelnen Tests).
+
+---
+
+## [September 2026] – Sicherheits- & Fairness-Audit
 
 Vollständiger Code-Audit durchgeführt (Funktionalität, Tippspiel-Logik,
 Punkteberechnung, Datenintegrität, Sicherheit) – siehe Ergebnisse und

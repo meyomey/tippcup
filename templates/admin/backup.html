@@ -26,6 +26,132 @@
   </div>
 </div>
 
+{# Automatisches tägliches Backup #}
+<div class="card shadow-sm mb-4 border-primary">
+  <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-clock-history me-2"></i>Automatisches tägliches Backup</span>
+    {% if auto_enabled %}
+      <span class="badge bg-light text-primary">Aktiv</span>
+    {% else %}
+      <span class="badge bg-secondary">Deaktiviert</span>
+    {% endif %}
+  </div>
+  <div class="card-body">
+    <div class="row g-3 mb-3">
+      <div class="col-12 col-md-6">
+        <div class="small text-muted">Letzter Versuch</div>
+        <div class="fw-semibold">
+          {% if last_attempt %}{{ last_attempt[:19]|replace('T',' ') }}{% else %}noch nie{% endif %}
+        </div>
+      </div>
+      <div class="col-12 col-md-6">
+        <div class="small text-muted">Letztes erfolgreiches Backup</div>
+        <div class="fw-semibold">
+          {% if last_success %}
+            {{ last_success[:19]|replace('T',' ') }}
+            {% if last_success == last_attempt %}<i class="bi bi-check-circle-fill text-success ms-1"></i>
+            {% else %}<i class="bi bi-exclamation-triangle-fill text-danger ms-1" title="Letzter Versuch war NICHT erfolgreich"></i>{% endif %}
+          {% else %}noch nie{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <form method="POST" action="{{ url_for('admin_backup_auto_settings') }}" class="row g-2 align-items-end mb-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="col-auto">
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" name="auto_enabled" id="auto_enabled" {% if auto_enabled %}checked{% endif %}>
+          <label class="form-check-label fw-semibold" for="auto_enabled">Automatisches Backup aktiv</label>
+        </div>
+      </div>
+      <div class="col-auto">
+        <label class="form-label small mb-0" for="retention_days">Aufbewahrung (Tage)</label>
+        <input type="number" min="1" max="365" name="retention_days" id="retention_days"
+               class="form-control form-control-sm" style="width:6rem" value="{{ retention_days }}">
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-primary btn-sm">
+          <i class="bi bi-save me-1"></i>Speichern
+        </button>
+      </div>
+    </form>
+
+    <div class="alert alert-info small mb-3">
+      <i class="bi bi-info-circle-fill me-2"></i>
+      Läuft automatisch mit, sobald irgendjemand die Startseite aufruft
+      (mindestens 23h seit dem letzten Lauf) – <strong>kein Cron nötig</strong>.
+      Für einen exakten täglichen Zeitpunkt (z.&nbsp;B. nachts) kannst du
+      optional zusätzlich einen externen Trigger einrichten, der einmal
+      täglich diese URL aufruft (z.&nbsp;B. Plesk → „Geplante Aufgaben"
+      mit <code>curl</code>, oder ein Dienst wie cron-job.org):
+      <div class="input-group input-group-sm mt-2">
+        <input type="text" class="form-control font-monospace" value="{{ cron_url }}" readonly
+               onclick="this.select()">
+        <button class="btn btn-outline-secondary" type="button"
+                onclick="navigator.clipboard.writeText('{{ cron_url }}')">
+          <i class="bi bi-clipboard"></i> Kopieren
+        </button>
+      </div>
+      <form method="POST" action="{{ url_for('admin_backup_regenerate_token') }}"
+            onsubmit="return confirm('Neues Token erzeugen? Die alte URL funktioniert danach nicht mehr.')"
+            class="mt-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-outline-danger btn-sm">
+          <i class="bi bi-arrow-repeat me-1"></i>Token neu erzeugen
+        </button>
+      </form>
+    </div>
+
+    <form method="POST" action="{{ url_for('admin_backup_run_now') }}" class="mb-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-play-fill me-1"></i>Jetzt sofort ein Backup erstellen
+      </button>
+    </form>
+
+    {% if auto_backups %}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Datei</th>
+            <th>Datum</th>
+            <th>Größe</th>
+            <th class="text-end">Aktionen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in auto_backups %}
+          <tr>
+            <td class="font-monospace small">{{ b.name }}</td>
+            <td class="small">{{ b.mtime }}</td>
+            <td class="small">
+              {% if b.size >= 1048576 %}{{ "%.1f"|format(b.size/1048576) }} MB
+              {% else %}{{ "%.0f"|format(b.size/1024) }} KB{% endif %}
+            </td>
+            <td class="text-end">
+              <a href="{{ url_for('admin_backup_download', filename=b.name) }}" class="btn btn-sm btn-outline-success">
+                <i class="bi bi-download"></i>
+              </a>
+              <form method="POST" action="{{ url_for('admin_backup_delete', filename=b.name) }}"
+                    class="d-inline" onsubmit="return confirm('Backup {{ b.name }} wirklich löschen?')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm btn-outline-danger">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted small mb-0">Noch keine automatischen Backups vorhanden.</p>
+    {% endif %}
+  </div>
+</div>
+
 <div class="row g-4">
 
   {# Backup erstellen #}

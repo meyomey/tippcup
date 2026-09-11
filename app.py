@@ -615,7 +615,7 @@ def inject_db_config():
 # Endpunkte, die absichtlich OHNE Session-Cookie aufgerufen werden und
 # daher kein CSRF-Ziel sind (eigene Authentifizierung über URL-Token
 # bzw. den alten Push-Endpoint):
-CSRF_EXEMPT_ENDPOINTS = {'telegram_webhook', 'push_renew'}
+CSRF_EXEMPT_ENDPOINTS = {'telegram_webhook', 'push_renew', 'cron_backup'}
 
 def get_csrf_token():
     if 'csrf_token' not in session:
@@ -1961,6 +1961,7 @@ def logout():
 @login_required
 def dashboard():
   try:
+    maybe_trigger_backup_async()
     season = maybe_auto_update(get_active_season())
     pred_status, user_score, user_rank = None, None, None
     standings = {'bl1':[], 'bl2':[]}
@@ -4061,11 +4062,52 @@ def spieltage_api(league, year, matchday):
         return jsonify({'ok': False, 'error': str(e)})
 
 # ── Admin Backup & Restore ─────────────────────
+def build_backup_zip_bytes(include_db=True, include_uploads=True, include_config=True):
+    """
+    Baut ein Backup-ZIP im Speicher und gibt die Rohbytes zurück.
+    Gemeinsam genutzt vom manuellen Download (admin_backup) und dem
+    automatischen täglichen Backup (run_scheduled_backup_if_due).
+    """
+    import zipfile, io as _io
+    timestamp   = local_now().strftime('%Y%m%d_%H%M%S')
+    db_path     = os.environ.get('DB_PATH', DATABASE)
+    uploads_dir = os.path.join(BASE_DIR, 'static', 'uploads')
+
+    buf = _io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+        if include_db:
+            db_tmp = os.path.join(tempfile.gettempdir(), f'tippcup_db_{timestamp}.db')
+            try:
+                get_db().execute(f"VACUUM INTO '{db_tmp}'")
+            except Exception:
+                shutil.copy2(db_path, db_tmp)
+            zf.write(db_tmp, 'tippspiel.db')
+            try: os.remove(db_tmp)
+            except Exception: pass
+
+        if include_config:
+            for fname in ('app.py', 'passenger_wsgi.py', 'telegram_bot.py',
+                          'openliga.py', 'requirements.txt'):
+                fpath = os.path.join(BASE_DIR, fname)
+                if os.path.exists(fpath):
+                    zf.write(fpath, f'config/{fname}')
+
+        if include_uploads and os.path.isdir(uploads_dir):
+            for root, _, files in os.walk(uploads_dir):
+                for fname in files:
+                    full = os.path.join(root, fname)
+                    rel  = os.path.relpath(full, uploads_dir)
+                    zf.write(full, f'uploads/{rel}')
+
+    buf.seek(0)
+    return buf.getvalue()
+
+
 @app.route('/admin/backup', methods=['POST'])
 @admin_required
 def admin_backup():
-    """Selektives Backup als ZIP – Inhalt per Checkboxen wählbar."""
-    import zipfile, io as _io
+    """Selektives Backup als ZIP – Inhalt per Checkboxen wählbar, direkter Download."""
+    import io as _io
     include_db      = 'include_db'      in request.form
     include_uploads = 'include_uploads' in request.form
     include_config  = 'include_config'  in request.form
@@ -4074,48 +4116,136 @@ def admin_backup():
         flash('Bitte mindestens eine Komponente auswählen.', 'warning')
         return redirect(url_for('admin_backup_page'))
 
-    timestamp   = local_now().strftime('%Y%m%d_%H%M%S')
-    parts       = []
+    timestamp = local_now().strftime('%Y%m%d_%H%M%S')
+    parts     = []
     if include_db:      parts.append('db')
     if include_uploads: parts.append('uploads')
     if include_config:  parts.append('config')
-    zip_name    = f'tippcup_backup_{timestamp}_{"_".join(parts)}.zip'
-    db_path     = os.environ.get('DB_PATH', DATABASE)
-    uploads_dir = os.path.join(BASE_DIR, 'static', 'uploads')
+    zip_name  = f'tippcup_backup_{timestamp}_{"_".join(parts)}.zip'
 
-    buf = _io.BytesIO()
     try:
-        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
-            if include_db:
-                db_tmp = os.path.join(tempfile.gettempdir(), f'tippcup_db_{timestamp}.db')
-                try:
-                    get_db().execute(f"VACUUM INTO '{db_tmp}'")
-                except Exception:
-                    shutil.copy2(db_path, db_tmp)
-                zf.write(db_tmp, 'tippspiel.db')
-                try: os.remove(db_tmp)
-                except Exception: pass
-
-            if include_config:
-                for fname in ('app.py', 'passenger_wsgi.py', 'telegram_bot.py',
-                              'openliga.py', 'requirements.txt'):
-                    fpath = os.path.join(BASE_DIR, fname)
-                    if os.path.exists(fpath):
-                        zf.write(fpath, f'config/{fname}')
-
-            if include_uploads and os.path.isdir(uploads_dir):
-                for root, _, files in os.walk(uploads_dir):
-                    for fname in files:
-                        full = os.path.join(root, fname)
-                        rel  = os.path.relpath(full, uploads_dir)
-                        zf.write(full, f'uploads/{rel}')
-
-        buf.seek(0)
-        return send_file(buf, as_attachment=True,
+        zip_bytes = build_backup_zip_bytes(include_db, include_uploads, include_config)
+        return send_file(_io.BytesIO(zip_bytes), as_attachment=True,
                          download_name=zip_name, mimetype='application/zip')
     except Exception as e:
         flash(f'Backup fehlgeschlagen: {e}', 'danger')
         return redirect(url_for('admin_backup_page'))
+
+
+# ── Automatisches tägliches Backup ────────────────────────────
+BACKUPS_DIR = os.path.join(BASE_DIR, 'backups')
+
+def _get_config_value(key, default=None):
+    row = get_db().execute('SELECT value FROM config WHERE key=?', (key,)).fetchone()
+    return row['value'] if row and row['value'] not in (None, '') else default
+
+def _set_config_value(key, value):
+    get_db().execute('INSERT OR REPLACE INTO config (key,value) VALUES (?,?)', (key, value))
+    get_db().commit()
+
+def get_or_create_backup_cron_token():
+    """Erzeugt beim ersten Aufruf ein zufälliges Token für den externen Cron-Trigger."""
+    token = _get_config_value('backup_cron_token')
+    if not token:
+        token = secrets.token_urlsafe(32)
+        _set_config_value('backup_cron_token', token)
+    return token
+
+def prune_old_backups(retention_days):
+    """Löscht automatische Backups, die älter als retention_days sind. Manuell
+    heruntergeladene Backups betrifft das nicht – die liegen nie auf der Platte,
+    sondern werden direkt als Download gestreamt (siehe admin_backup)."""
+    if not os.path.isdir(BACKUPS_DIR):
+        return
+    cutoff = local_now() - timedelta(days=retention_days)
+    for fname in os.listdir(BACKUPS_DIR):
+        if not fname.endswith('.zip'):
+            continue
+        fpath = os.path.join(BACKUPS_DIR, fname)
+        try:
+            mtime = datetime.fromtimestamp(os.path.getmtime(fpath))
+            if mtime < cutoff:
+                os.remove(fpath)
+        except Exception as e:
+            app.logger.debug(f"Ignorierter Fehler beim Backup-Aufräumen: {e}")
+
+def run_scheduled_backup_if_due(force=False):
+    """
+    Prüft, ob das letzte automatische Backup >= 23h her ist, und erstellt bei
+    Bedarf eins auf der Festplatte (backups/-Verzeichnis, per .gitignore vom
+    Repo ausgeschlossen). Läuft entweder über einen leichten Trigger bei
+    Seitenaufrufen (siehe dashboard()) oder über den externen Cron-Endpoint
+    /cron/backup/<token>. Ist sicher gegen doppelte Ausführung durch parallele
+    Requests, da der "Belegt"-Zeitstempel vor der eigentlichen Arbeit gesetzt wird.
+    """
+    with app.app_context():
+        db = get_db()
+        if not force and _get_config_value('backup_auto_enabled', '1') == '0':
+            return False
+        now = local_now()
+        if not force:
+            last_raw = _get_config_value('backup_last_auto')
+            if last_raw:
+                try:
+                    last = datetime.fromisoformat(last_raw)
+                    if now - last < timedelta(hours=23):
+                        return False
+                except Exception as e:
+                    app.logger.debug(f"Ignorierter Fehler: {e}")
+        # Zeitstempel SOFORT setzen, bevor die eigentliche Arbeit beginnt –
+        # verhindert, dass zwei fast gleichzeitige Trigger (Seitenaufruf +
+        # externer Cron) doppelt loslaufen.
+        _set_config_value('backup_last_auto', now.isoformat())
+        try:
+            os.makedirs(BACKUPS_DIR, exist_ok=True)
+            zip_bytes = build_backup_zip_bytes(include_db=True, include_uploads=True, include_config=True)
+            zip_name  = f'tippcup_backup_{now.strftime("%Y%m%d_%H%M%S")}_auto.zip'
+            zip_path  = os.path.join(BACKUPS_DIR, zip_name)
+            if os.path.exists(zip_path):
+                # Zwei Läufe innerhalb derselben Sekunde (z.B. manuelles "Jetzt
+                # erstellen" kurz nach einem automatischen Lauf) - Kollision
+                # durch kurzen Zufalls-Suffix vermeiden statt zu überschreiben.
+                zip_name = f'tippcup_backup_{now.strftime("%Y%m%d_%H%M%S")}_{secrets.token_hex(3)}_auto.zip'
+                zip_path = os.path.join(BACKUPS_DIR, zip_name)
+            with open(zip_path, 'wb') as f:
+                f.write(zip_bytes)
+            retention_days = int(_get_config_value('backup_retention_days', '14'))
+            prune_old_backups(retention_days)
+            _set_config_value('backup_last_success', now.isoformat())
+            app.logger.info(f'Automatisches Backup erstellt: {zip_name}')
+            return True
+        except Exception:
+            app.logger.exception('Automatisches Backup fehlgeschlagen')
+            return False
+
+def maybe_trigger_backup_async():
+    """Wird von einer normalen Nutzer-Anfrage (dashboard) aus aufgerufen –
+    läuft in einem Hintergrund-Thread, damit kein Seitenaufruf durch das
+    Backup verzögert wird."""
+    if app.config.get('TESTING'):
+        return  # In Tests nie Hintergrund-Threads starten (Race Conditions mit der Test-DB)
+    import threading
+    def _bg():
+        try:
+            run_scheduled_backup_if_due()
+        except Exception:
+            app.logger.exception('Hintergrund-Backup-Trigger fehlgeschlagen')
+    threading.Thread(target=_bg, daemon=True).start()
+
+@app.route('/cron/backup/<token>')
+def cron_backup(token):
+    """
+    Externer Trigger-Endpoint für Plesk 'Geplante Aufgaben' oder einen Dienst
+    wie cron-job.org – ruft z.B. einmal täglich per curl/HTTP-GET diese URL
+    auf. Sessionlos, daher kein CSRF-Token nötig (siehe CSRF_EXEMPT_ENDPOINTS).
+    Der Token wird zufällig generiert und ist in der Admin-Backup-Seite sichtbar.
+    """
+    with app.app_context():
+        expected = get_or_create_backup_cron_token()
+    if not expected or not hmac.compare_digest(expected, token):
+        return jsonify({'ok': False, 'error': 'invalid token'}), 403
+    ok = run_scheduled_backup_if_due(force=True)
+    return jsonify({'ok': ok})
 
 
 @app.route('/admin/backup/page')
@@ -4141,9 +4271,110 @@ def admin_backup_page():
         'predictions': db.execute('SELECT COUNT(*) FROM predictions').fetchone()[0],
         'seasons':     db.execute('SELECT COUNT(*) FROM seasons').fetchone()[0],
     }
+
+    # Automatisches Backup: Status + vorhandene Dateien
+    auto_enabled   = _get_config_value('backup_auto_enabled', '1') == '1'
+    retention_days = int(_get_config_value('backup_retention_days', '14'))
+    last_attempt   = _get_config_value('backup_last_auto')
+    last_success   = _get_config_value('backup_last_success')
+    cron_token     = get_or_create_backup_cron_token()
+    cron_url       = url_for('cron_backup', token=cron_token, _external=True)
+
+    auto_backups = []
+    if os.path.isdir(BACKUPS_DIR):
+        for fname in sorted(os.listdir(BACKUPS_DIR), reverse=True):
+            if not fname.endswith('.zip'):
+                continue
+            fpath = os.path.join(BACKUPS_DIR, fname)
+            auto_backups.append({
+                'name': fname,
+                'size': os.path.getsize(fpath),
+                'mtime': datetime.fromtimestamp(os.path.getmtime(fpath)).strftime('%d.%m.%Y %H:%M:%S'),
+            })
+
     return render_template('admin/backup.html',
         db_size=db_size, db_mtime=db_mtime, stats=stats,
-        upload_size=upload_size, upload_count=upload_count)
+        upload_size=upload_size, upload_count=upload_count,
+        auto_enabled=auto_enabled, retention_days=retention_days,
+        last_attempt=last_attempt, last_success=last_success,
+        cron_url=cron_url, auto_backups=auto_backups)
+
+
+@app.route('/admin/backup/auto-settings', methods=['POST'])
+@admin_required
+def admin_backup_auto_settings():
+    """Speichert Ein/Aus + Aufbewahrungsdauer für das automatische Backup."""
+    enabled = '1' if request.form.get('auto_enabled') == 'on' else '0'
+    try:
+        retention_days = max(1, min(365, int(request.form.get('retention_days', 14))))
+    except (TypeError, ValueError):
+        retention_days = 14
+    _set_config_value('backup_auto_enabled', enabled)
+    _set_config_value('backup_retention_days', str(retention_days))
+    flash('Einstellungen für automatisches Backup gespeichert.', 'success')
+    return redirect(url_for('admin_backup_page'))
+
+
+@app.route('/admin/backup/regenerate-token', methods=['POST'])
+@admin_required
+def admin_backup_regenerate_token():
+    """Erzeugt ein neues Cron-Token – die alte URL funktioniert danach nicht mehr."""
+    new_token = secrets.token_urlsafe(32)
+    _set_config_value('backup_cron_token', new_token)
+    flash('Neues Cron-Token erzeugt. Bitte die URL in Plesk/eurem Cron-Dienst aktualisieren!', 'warning')
+    return redirect(url_for('admin_backup_page'))
+
+
+@app.route('/admin/backup/run-now', methods=['POST'])
+@admin_required
+def admin_backup_run_now():
+    """Löst manuell sofort ein automatisches Backup aus (landet in backups/, wie der Cron-Trigger)."""
+    ok = run_scheduled_backup_if_due(force=True)
+    flash('Backup erstellt.' if ok else 'Backup fehlgeschlagen – Details im Server-Log.',
+          'success' if ok else 'danger')
+    return redirect(url_for('admin_backup_page'))
+
+
+def _safe_backup_filename(filename):
+    """Verhindert Path-Traversal: nur exakt ein Dateiname aus dem backups/-Verzeichnis selbst."""
+    if not filename or '/' in filename or '\\' in filename or filename in ('.', '..'):
+        return None
+    fpath = os.path.join(BACKUPS_DIR, filename)
+    if not os.path.isfile(fpath):
+        return None
+    # Sicherstellen, dass der aufgelöste Pfad wirklich innerhalb von BACKUPS_DIR liegt
+    if os.path.realpath(fpath) != os.path.realpath(os.path.join(BACKUPS_DIR, filename)):
+        return None
+    if os.path.dirname(os.path.realpath(fpath)) != os.path.realpath(BACKUPS_DIR):
+        return None
+    return fpath
+
+
+@app.route('/admin/backup/download/<path:filename>')
+@admin_required
+def admin_backup_download(filename):
+    fpath = _safe_backup_filename(filename)
+    if not fpath:
+        flash('Backup-Datei nicht gefunden.', 'danger')
+        return redirect(url_for('admin_backup_page'))
+    return send_file(fpath, as_attachment=True, download_name=os.path.basename(fpath),
+                     mimetype='application/zip')
+
+
+@app.route('/admin/backup/delete/<path:filename>', methods=['POST'])
+@admin_required
+def admin_backup_delete(filename):
+    fpath = _safe_backup_filename(filename)
+    if not fpath:
+        flash('Backup-Datei nicht gefunden.', 'danger')
+        return redirect(url_for('admin_backup_page'))
+    try:
+        os.remove(fpath)
+        flash('Backup gelöscht.', 'success')
+    except Exception:
+        app.logger.exception('Backup konnte nicht gelöscht werden')
+        flash('Löschen fehlgeschlagen.', 'danger')
+    return redirect(url_for('admin_backup_page'))
 
 
 @app.route('/admin/restore', methods=['POST'])
