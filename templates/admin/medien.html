@@ -494,7 +494,7 @@ window.navDragOver = function(e, el) {
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   el.style.background = 'rgba(26,94,42,.15)';
-  el.style.outline    = '2px solid #1a5e2a';
+  el.style.outline    = '2px solid var(--bl-green)';
 };
 window.navDragLeave = function(el) {
   el.style.background = '';
@@ -570,7 +570,7 @@ if (uploadDZ) {
   uploadDZ.addEventListener('dragover', e => {
     e.preventDefault();
     uploadDZ.style.background = '#d4edda';
-    uploadDZ.style.borderColor = '#1a5e2a';
+    uploadDZ.style.borderColor = 'var(--bl-green)';
   });
   uploadDZ.addEventListener('dragleave', () => {
     uploadDZ.style.background = '';

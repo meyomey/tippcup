@@ -13,6 +13,8 @@
            class="list-group-item list-group-item-action {% if request.endpoint == 'admin_dashboard' %}active{% endif %}">
           <i class="bi bi-speedometer2 me-2"></i>Dashboard
         </a>
+
+        <div class="list-group-item px-3 py-1 text-muted" style="font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;background:transparent">Saison & Teilnehmer</div>
         <a href="{{ url_for('admin_users') }}"
            class="list-group-item list-group-item-action {% if 'user' in request.endpoint %}active{% endif %}">
           <i class="bi bi-people-fill me-2"></i>Benutzer
@@ -29,6 +31,18 @@
            class="list-group-item list-group-item-action {% if request.endpoint == 'admin_manual_standings' %}active{% endif %}">
           <i class="bi bi-pencil-square me-2"></i>Manuelle Tabelle
         </a>
+
+        <div class="list-group-item px-3 py-1 text-muted" style="font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;background:transparent">Inhalte & Archiv</div>
+        <a href="{{ url_for('admin_medien') }}"
+           class="list-group-item list-group-item-action {% if request.endpoint in ('admin_medien','admin_links') %}active{% endif %}">
+          <i class="bi bi-images me-2"></i>Medien & Links
+        </a>
+        <a href="{{ url_for('admin_archiv_import') }}"
+           class="list-group-item list-group-item-action {% if request.endpoint == 'admin_archiv_import' %}active{% endif %}">
+          <i class="bi bi-clock-history me-2"></i>Tipp-Archiv
+        </a>
+
+        <div class="list-group-item px-3 py-1 text-muted" style="font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;background:transparent">Kommunikation</div>
         <a href="{{ url_for('admin_email') }}"
            class="list-group-item list-group-item-action {% if request.endpoint == 'admin_email' %}active{% endif %}">
           <i class="bi bi-envelope-fill me-2"></i>E-Mail / Rundbrief
@@ -37,6 +51,8 @@
            class="list-group-item list-group-item-action {% if request.endpoint == 'admin_telegram' %}active{% endif %}">
           <i class="bi bi-telegram me-2" style="color:#0088cc"></i>Telegram
         </a>
+
+        <div class="list-group-item px-3 py-1 text-muted" style="font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;background:transparent">System</div>
         <a href="{{ url_for('admin_api_config') }}"
            class="list-group-item list-group-item-action {% if request.endpoint == 'admin_api_config' %}active{% endif %}">
           <i class="bi bi-key-fill me-2"></i>API-Einstellungen
@@ -49,18 +65,11 @@
            class="list-group-item list-group-item-action {% if 'backup' in request.endpoint %}active{% endif %}">
           <i class="bi bi-archive-fill me-2"></i>Backup & Restore
         </a>
-        <a href="{{ url_for('admin_medien') }}"
-           class="list-group-item list-group-item-action {% if request.endpoint in ('admin_medien','admin_links') %}active{% endif %}">
-          <i class="bi bi-images me-2"></i>Medien & Links
-        </a>
-        <a href="/admin/archiv/import"
-           class="list-group-item list-group-item-action {% if request.endpoint == 'admin_archiv_import' %}active{% endif %}">
-          <i class="bi bi-clock-history me-2"></i>Tipp-Archiv
-        </a>
         <a href="{{ url_for('admin_migration') }}"
            class="list-group-item list-group-item-action {% if 'migration' in (request.endpoint or '') %}active{% endif %}">
           <i class="bi bi-arrow-left-right me-2"></i>Domain-Migration
         </a>
+
         <div class="list-group-item px-3 py-1 text-muted" style="font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;background:transparent">Dokumentation</div>
         <a href="{{ url_for('admin_handbuch') }}"
            class="list-group-item list-group-item-action {% if request.endpoint == 'admin_handbuch' %}active{% endif %}">

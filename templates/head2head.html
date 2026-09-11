@@ -42,7 +42,7 @@
   <div class="card-body p-3">
     <div class="row text-center g-0">
       <div class="col-5">
-        <div class="profile-avatar mx-auto mb-2" style="background:#1a5e2a">{{ (u1.display_name or u1.username)[0].upper() }}</div>
+        <div class="profile-avatar mx-auto mb-2" style="background:var(--bl-green)">{{ (u1.display_name or u1.username)[0].upper() }}</div>
         <div class="fw-bold fs-5">{{ u1.display_name or u1.username }}</div>
         {% if sc1 %}<div class="display-4 fw-bold text-success">{{ sc1.score }}</div>{% else %}<div class="text-muted">–</div>{% endif %}
         <div class="badge {% if sc1 and sc2 and sc1.score > sc2.score %}bg-success{% else %}bg-secondary{% endif %} fs-6">
@@ -60,7 +60,7 @@
         {% endif %}
       </div>
       <div class="col-5">
-        <div class="profile-avatar mx-auto mb-2" style="background:#d4001a">{{ (u2.display_name or u2.username)[0].upper() }}</div>
+        <div class="profile-avatar mx-auto mb-2" style="background:var(--bl-red)">{{ (u2.display_name or u2.username)[0].upper() }}</div>
         <div class="fw-bold fs-5">{{ u2.display_name or u2.username }}</div>
         {% if sc2 %}<div class="display-4 fw-bold text-danger">{{ sc2.score }}</div>{% else %}<div class="text-muted">–</div>{% endif %}
         <div class="badge {% if sc1 and sc2 and sc2.score > sc1.score %}bg-danger{% else %}bg-secondary{% endif %} fs-6">

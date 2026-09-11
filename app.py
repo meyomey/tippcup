@@ -1194,6 +1194,27 @@ def _seconds_since_fetch(cache_row) -> float:
     except:
         return float('inf')
 
+def _fetch_or_error(fn, *args, **kwargs):
+    """
+    Ruft eine externe API-Funktion auf (football-data.org/OpenligaDB) und
+    fängt die drei Standard-Netzwerkfehler einheitlich ab (Timeout,
+    Connection-Error, sonstiger Fehler) – statt denselben try/except-Block
+    an mehreren Stellen zu wiederholen.
+    Gibt (result, error_message) zurück: bei Erfolg ist error_message None
+    und result das Rückgabeergebnis von fn(*args, **kwargs); bei Fehler ist
+    result None und error_message ein lesbarer Text.
+    """
+    import requests as _req
+    try:
+        return fn(*args, **kwargs), None
+    except _req.exceptions.ConnectTimeout:
+        return None, 'Timeout – API nicht erreichbar.'
+    except _req.exceptions.ConnectionError:
+        return None, 'Keine Verbindung zur API möglich.'
+    except Exception as e:
+        return None, str(e)
+
+
 def update_standings_from_api(season, force=False):
     """
     Aktualisiert die Tabelle intelligent:
@@ -1201,7 +1222,6 @@ def update_standings_from_api(season, force=False):
     - football-data.org: Content-Hash-Vergleich (kein change-endpoint verfügbar)
     - Beide:             TTL-basiertes Caching in api_cache (DB)
     """
-    import requests as _req
     db = get_db(); errors = []; success = []
 
     for league in ('bl1', 'bl2'):
@@ -1224,12 +1244,10 @@ def update_standings_from_api(season, force=False):
         if fd_key:
             # ── football-data.org: Hash-basiert ──────────────────────
             # Kein getlastchangedate → direkt laden und Hash vergleichen
-            try:
-                table, new_hash = ol.get_table_with_hash(league, season['year'])
-            except _req.exceptions.ConnectTimeout:
-                errors.append(f'{league}: Timeout'); continue
-            except Exception as e:
-                errors.append(f'{league}: {e}'); continue
+            result, err = _fetch_or_error(ol.get_table_with_hash, league, season['year'])
+            if err:
+                errors.append(f'{league}: {err}'); continue
+            table, new_hash = result
 
             if new_hash == known_ts and not force:
                 # Inhalt unverändert → nur TTL erneuern, kein DB-Update nötig
@@ -1253,14 +1271,10 @@ def update_standings_from_api(season, force=False):
             except Exception:
                 new_ts = ''  # Bei Fehler trotzdem laden
 
-            try:
-                table, _ = ol.ol_get_table(league, season['year'])
-            except _req.exceptions.ConnectTimeout:
-                errors.append(f'{league}: Timeout'); continue
-            except _req.exceptions.ConnectionError:
-                errors.append(f'{league}: Verbindungsfehler'); continue
-            except Exception as e:
-                errors.append(f'{league}: {e}'); continue
+            result, err = _fetch_or_error(ol.ol_get_table, league, season['year'])
+            if err:
+                errors.append(f'{league}: {err}'); continue
+            table, _ = result
 
         # ── Tabelle in DB schreiben ───────────────────────────────
         stopwords = {'fc', 'sc', 'sv', 'vfl', 'vfb', '04', '05', '1.', '1899', 'rb', 'tsg', 'bsc'}
@@ -3014,56 +3028,68 @@ def _upsert_teams(db, table, season_id, league):
             inserted += 1
     return updated, inserted
 
-@app.route('/admin/teams/import_both', methods=['POST'])
-@admin_required
-def admin_import_both():
+def _import_teams_for_league(db, season, league):
+    """
+    Importiert die Team-Tabelle einer Liga von der API und aktualisiert die DB.
+    Gemeinsam genutzt von admin_import_both() (beide Ligen) und
+    admin_import_teams() (eine Liga) – vermeidet doppelten Code für
+    API-Aufruf + Fehlerbehandlung (Timeout/Connection/Sonstiges).
+    Gibt (message: str, is_error: bool) zurück, wirft selbst nichts.
+    """
     import requests as _req
-    season = get_active_season()
-    if not season: flash('Keine aktive Saison.','danger'); return redirect(url_for('admin_teams'))
-    db = get_db(); msgs = []
-    for league in ('bl1','bl2'):
-        try:
-            table = ol.get_table(league, season['year'])
-            upd, ins = _upsert_teams(db, table, season['id'], league)
-            msgs.append(f'{LEAGUES[league]}: {upd} aktualisiert, {ins} neu')
-        except _req.exceptions.ConnectTimeout:
-            flash(f'{LEAGUES[league]}: Timeout – API nicht erreichbar.','danger')
-        except _req.exceptions.ConnectionError:
-            flash(f'{LEAGUES[league]}: Keine Verbindung zur API möglich.','danger')
-        except Exception as e:
-            flash(f'Fehler {LEAGUES[league]}: {e}','danger')
-    if msgs:
-        db.commit()
-        flash(' | '.join(msgs), 'success')
-    # Backup-Reparatur immer versuchen
+    try:
+        table = ol.get_table(league, season['year'])
+        upd, ins = _upsert_teams(db, table, season['id'], league)
+        return f'{LEAGUES[league]}: {upd} Teams aktualisiert, {ins} neu hinzugefügt.', False
+    except _req.exceptions.ConnectTimeout:
+        return f'{LEAGUES[league]}: Timeout – API nicht erreichbar. Bitte in ein paar Minuten erneut versuchen.', True
+    except _req.exceptions.ConnectionError:
+        return f'{LEAGUES[league]}: Keine Verbindung zur API möglich.', True
+    except Exception as e:
+        return f'Fehler {LEAGUES[league]}: {e}', True
+
+
+def _finish_team_import(db, season):
+    """Nach jedem Team-Import (egal ob eine oder beide Ligen): versucht,
+    verwaiste Tipp-Verknüpfungen aus dem Backup zu reparieren (Teams
+    bekommen bei jedem API-Import neue interne IDs)."""
     repaired, unmatched = _repair_predictions_from_backup(db, season['id'])
     if repaired:
         flash(f'✅ {repaired} Tipp-Verknüpfungen wiederhergestellt.', 'success')
+
+
+@app.route('/admin/teams/import_both', methods=['POST'])
+@admin_required
+def admin_import_both():
+    season = get_active_season()
+    if not season: flash('Keine aktive Saison.','danger'); return redirect(url_for('admin_teams'))
+    db = get_db()
+    msgs = []
+    for league in ('bl1', 'bl2'):
+        msg, is_error = _import_teams_for_league(db, season, league)
+        if is_error:
+            flash(msg, 'danger')
+        else:
+            msgs.append(msg)
+    if msgs:
+        db.commit()
+        flash(' | '.join(msgs), 'success')
+    _finish_team_import(db, season)
     return redirect(url_for('admin_teams'))
 
 @app.route('/admin/teams/import', methods=['POST'])
 @admin_required
 def admin_import_teams():
-    import requests as _req
     season = get_active_season(); league = request.form.get('league','bl1')
     if not season: flash('Keine aktive Saison.','danger'); return redirect(url_for('admin_teams'))
     db = get_db()
-    try:
-        table = ol.get_table(league, season['year'])
-        upd, ins = _upsert_teams(db, table, season['id'], league)
+    msg, is_error = _import_teams_for_league(db, season, league)
+    if is_error:
+        flash(msg, 'danger')
+    else:
         db.commit()
-        msg = f'{LEAGUES[league]}: {upd} Teams aktualisiert, {ins} neu hinzugefügt.'
         flash(msg, 'success')
-    except _req.exceptions.ConnectTimeout:
-        flash('Timeout – API nicht erreichbar. Bitte in ein paar Minuten erneut versuchen.','danger')
-    except _req.exceptions.ConnectionError:
-        flash('Keine Verbindung zur API möglich.','danger')
-    except Exception as e:
-        flash(f'Fehler: {e}','danger')
-    # Backup-Reparatur immer versuchen (unabhängig vom API-Ergebnis)
-    repaired, unmatched = _repair_predictions_from_backup(db, season['id'])
-    if repaired:
-        flash(f'✅ {repaired} Tipp-Verknüpfungen wiederhergestellt.', 'success')
+    _finish_team_import(db, season)
     return redirect(url_for('admin_teams'))
 
 @app.route('/admin/teams/add', methods=['POST'])
@@ -3953,7 +3979,6 @@ def admin_manual_standings():
 @app.route('/spieltage/<league>/<int:matchday>')
 @login_required
 def spieltage(league='bl1', matchday=None):
-    import requests as _req
     season = get_active_season()
     year   = season['year'] if season else local_now().year
 
@@ -3968,15 +3993,12 @@ def spieltage(league='bl1', matchday=None):
     error      = None
     has_live   = False
 
-    try:
-        matches  = ol.get_matchday_normalized(league, year, matchday)
+    matches, err = _fetch_or_error(ol.get_matchday_normalized, league, year, matchday)
+    if err:
+        error   = err
+        matches = []
+    else:
         has_live = any(m['is_live'] for m in matches)
-    except _req.exceptions.ConnectTimeout:
-        error = 'Timeout – OpenligaDB nicht erreichbar.'
-    except _req.exceptions.ConnectionError:
-        error = 'Keine Verbindung zu OpenligaDB.'
-    except Exception as e:
-        error = f'Fehler: {e}'
 
     # Spieltag-Navigation: max 34 Spieltage
     return render_template('spieltage.html',
@@ -4074,6 +4096,12 @@ def spieltage_api(league, year, matchday):
             except Exception as e:
                 app.logger.debug(f"Ignorierter Fehler: {e}")
         return jsonify({'ok': False, 'error': str(e)})
+
+# ══════════════════════════════════════════════════════════════
+# ROUTEN – ADMIN: BACKUP, SICHERHEIT & SYSTEM-KONFIGURATION
+# (Backup/Restore inkl. Cron-Trigger, API-Einstellungen, Login-Sicherheit,
+#  E-Mail-Rundbrief-Konfiguration)
+# ══════════════════════════════════════════════════════════════
 
 # ── Admin Backup & Restore ─────────────────────
 def build_backup_zip_bytes(include_db=True, include_uploads=True, include_config=True):
@@ -4254,6 +4282,41 @@ def cron_backup(token):
         return jsonify({'ok': False, 'error': 'invalid token'}), 403
     ok = run_scheduled_backup_if_due(force=True)
     return jsonify({'ok': ok})
+
+
+def get_or_create_update_cron_token():
+    """Erzeugt beim ersten Aufruf ein zufälliges Token für den externen
+    Tabellen-Update-Trigger (/cron/update/<token>) – analog zum
+    Backup-Cron-Token. Sichtbar in der Admin-API-Einstellungen-Seite."""
+    token = get_setting('update_cron_token')
+    if not token:
+        token = secrets.token_urlsafe(32)
+        set_setting('update_cron_token', token)
+    return token
+
+
+@app.route('/cron/update/<token>')
+def cron_update(token):
+    """
+    Externer Trigger-Endpoint für Plesk 'Geplante Aufgaben' oder einen Dienst
+    wie cron-job.org, um Tabelle + Scores gezielt zu aktualisieren (unabhängig
+    vom passiven Auto-Update, das bei jedem Dashboard-Aufruf mitläuft – siehe
+    maybe_auto_update()). Empfehlung: alle 30 Min aufrufen (z.B. */30 * * * *).
+    Token wird zufällig generiert und ist in den Admin-API-Einstellungen sichtbar.
+    """
+    with app.app_context():
+        expected = get_or_create_update_cron_token()
+    if not expected or not hmac.compare_digest(expected, token):
+        return 'Unauthorized', 401
+    season = get_active_season()
+    if not season or not season['season_started']:
+        return 'no active season', 200
+    try:
+        update_standings_from_api(season, force=True)
+        return 'ok', 200
+    except Exception as e:
+        app.logger.error(f'cron_update Fehler: {e}')
+        return f'error: {e}', 500
 
 
 @app.route('/admin/backup/page')
@@ -4573,6 +4636,12 @@ def admin_api_config():
     if request.method == 'POST':
         action = request.form.get('action', 'save_key')
 
+        if action == 'regenerate_update_token':
+            new_token = secrets.token_urlsafe(32)
+            set_setting('update_cron_token', new_token)
+            flash('Neues Update-Cron-Token erzeugt. Bitte die URL in Plesk/eurem Cron-Dienst aktualisieren!', 'warning')
+            return redirect(url_for('admin_api_config'))
+
         if action == 'clear_push':
             get_db().execute('DELETE FROM push_subscriptions')
             get_db().commit()
@@ -4624,11 +4693,15 @@ def admin_api_config():
     vapid_version = db.execute("SELECT data FROM api_cache WHERE key='vapid_key_version'").fetchone()
     vapid_ver     = vapid_version['data'] if vapid_version else VAPID_KEY_VERSION
 
+    update_cron_token = get_or_create_update_cron_token()
+    update_cron_url    = url_for('cron_update', token=update_cron_token, _external=True)
+
     return render_template('admin/api_config.html',
         current_key=current_key, provider=provider,
         push_total=push_total, push_users=push_users, push_by_user=push_by_user,
         vapid_ok=vapid_ok, vapid_ver=vapid_ver,
-        vapid_public_short=VAPID_PUBLIC_KEY[:24] + '…' if VAPID_PUBLIC_KEY else '–')
+        vapid_public_short=VAPID_PUBLIC_KEY[:24] + '…' if VAPID_PUBLIC_KEY else '–',
+        update_cron_url=update_cron_url)
 
 @app.route('/admin/security')
 @admin_required
@@ -4774,7 +4847,9 @@ def admin_email():
         users_list=users_list, leagues=LEAGUES)
 
 # ══════════════════════════════════════════════
-# NEUE FEATURES
+# ROUTEN – ZUSATZFUNKTIONEN & BENACHRICHTIGUNGEN
+# (Erinnerungsmails, Head-to-Head-Vergleich, Spieltag-Highlights,
+#  Saisonrückblick, Team-Statistik, Web-Push, Abzeichen, Dark Mode)
 # ══════════════════════════════════════════════
 
 # ── 1. Tippschluss-Erinnerungsmail ────────────
@@ -6589,12 +6664,14 @@ def hilfe():
     return render_template('hilfe.html', sections=sections)
 
 
-@app.route('/admin/doku')
-@admin_required
-def admin_doku():
-    """Technische Dokumentation im Admin-Bereich."""
+def _render_markdown_doc(filename, title):
+    """
+    Lädt eine Markdown-Datei aus docs/ und rendert sie als HTML.
+    Gemeinsam genutzt von admin_doku() und admin_handbuch() – beide
+    Seiten unterscheiden sich nur in Quelldatei und Titel.
+    """
     import pathlib
-    doc_path = pathlib.Path(BASE_DIR) / 'docs' / 'TECHNISCHE_DOKUMENTATION.md'
+    doc_path = pathlib.Path(BASE_DIR) / 'docs' / filename
     try:
         import markdown as md_lib
         content = md_lib.markdown(
@@ -6604,26 +6681,20 @@ def admin_doku():
     except Exception:
         content = '<pre>' + doc_path.read_text(encoding='utf-8') + '</pre>'
     return render_template('admin/doku.html', content=content,
-                           title='Technische Dokumentation',
-                           filename='TECHNISCHE_DOKUMENTATION.md')
+                           title=title, filename=filename)
+
+
+@app.route('/admin/doku')
+@admin_required
+def admin_doku():
+    """Technische Dokumentation im Admin-Bereich."""
+    return _render_markdown_doc('TECHNISCHE_DOKUMENTATION.md', 'Technische Dokumentation')
 
 @app.route('/admin/handbuch')
 @admin_required
 def admin_handbuch():
     """Benutzerhandbuch im Admin-Bereich (Markdown)."""
-    import pathlib
-    doc_path = pathlib.Path(BASE_DIR) / 'docs' / 'BENUTZERHANDBUCH.md'
-    try:
-        import markdown as md_lib
-        content = md_lib.markdown(
-            doc_path.read_text(encoding='utf-8'),
-            extensions=['tables', 'fenced_code', 'toc']
-        )
-    except Exception:
-        content = '<pre>' + doc_path.read_text(encoding='utf-8') + '</pre>'
-    return render_template('admin/doku.html', content=content,
-                           title='Benutzerhandbuch',
-                           filename='BENUTZERHANDBUCH.md')
+    return _render_markdown_doc('BENUTZERHANDBUCH.md', 'Benutzerhandbuch')
 
 
 
@@ -6735,7 +6806,7 @@ def admin_migration_update_webhook():
         flash('URL muss mit https:// beginnen.', 'danger')
         return redirect(url_for('admin_migration'))
     # Telegram Webhook setzen
-    tg_token = get_config('telegram_token', '')
+    tg_token = get_setting('telegram_token', '')
     if not tg_token:
         flash('Kein Telegram-Token konfiguriert.', 'danger')
         return redirect(url_for('admin_migration'))
@@ -6763,27 +6834,9 @@ def admin_migration_update_webhook():
 # ════════════════════════════════════════════════════════════
 # CRON, SONSTIGES
 # ════════════════════════════════════════════════════════════
-
-
-@app.route('/cron/update/<token>')
-def cron_update(token):
-    """
-    Wird von einem Plesk-Cronjob aufgerufen um Tabelle + Scores automatisch
-    zu aktualisieren. Token schützt vor unbefugtem Zugriff.
-    Empfehlung: alle 30 Min aufrufen (z.B. */30 * * * *)
-    """
-    expected = get_config('cron_token', '')
-    if not expected or token != expected:
-        return 'Unauthorized', 401
-    season = get_active_season()
-    if not season or not season['season_started']:
-        return 'no active season', 200
-    try:
-        update_standings_from_api(season, force=True)
-        return 'ok', 200
-    except Exception as e:
-        app.logger.error(f'cron_update Fehler: {e}')
-        return f'error: {e}', 500
+# (cron_backup und cron_update liegen jetzt zusammen bei den anderen
+#  Backup-Funktionen weiter oben – beide sind dasselbe Muster: externer,
+#  token-gesicherter Trigger.)
 
 
 def page_not_found(e):

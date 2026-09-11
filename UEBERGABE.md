@@ -5,6 +5,15 @@ für den Einstieg in einen neuen Chat.
 
 ## Wichtigste Punkte
 
+- **Gesamt-Audit durchgeführt** (September 2026): Code-Duplikate,
+  Datei-Struktur und UI-Konsistenz komplett durchgesehen und behoben.
+  Dabei zwei vorbestehende, echte Bugs gefunden: `telegram_token` wurde
+  an einer Stelle aus der falschen Config-Tabelle gelesen (Migration-
+  Webhook-Update war kaputt), und `/cron/update/<token>` hatte nie ein
+  setzbares Token (war seit jeher unbenutzbar) – beide jetzt gefixt.
+  Admin-Routen sind jetzt im Code klarer gruppiert, Admin-Sidebar in
+  5 Kategorien gegliedert. Details siehe CHANGELOG.md.
+
 - **Backup-Bereich überarbeitet** (September 2026): automatisches
   Backup ist jetzt konfigurierbar (welche Komponenten), Restore ist
   granular (DB/Medien/Config einzeln wählbar, sowohl beim Datei-Upload

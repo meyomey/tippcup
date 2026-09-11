@@ -4,7 +4,72 @@ Alle wesentlichen Änderungen am Tippcup-Projekt werden hier dokumentiert.
 
 ---
 
-## [Aktuell] – September 2026 – Backup-Bereich aufgeräumt & granulares Restore
+## [Aktuell] – September 2026 – Gesamt-Audit: Duplikate, Struktur, UI
+
+Auf Wunsch vollständiges Audit des gesamten Projekts (nicht nur Backup)
+durchgeführt: Code-Duplikate, logische Struktur, UI-Konsistenz. Ergebnisse
+und Fixes (siehe auch die Bericht-Nachricht im Chat für die volle
+Fund-Liste):
+
+### Code-Duplikate behoben
+- `admin_import_teams()` / `admin_import_both()` zusammengeführt (gemeinsame
+  Helper `_import_teams_for_league()` + `_finish_team_import()`)
+- `admin_doku()` / `admin_handbuch()` zusammengeführt (gemeinsamer Helper
+  `_render_markdown_doc()`)
+- 5× wiederholter API-Fehlerbehandlungsblock (Timeout/Connection-Error) auf
+  gemeinsamen Helper `_fetch_or_error()` umgestellt, u.a. in der kritischen
+  `update_standings_from_api()` – mit gezielten Tests gegen simulierte
+  Netzwerkfehler abgesichert, um die Kernfunktion nicht zu gefährden
+- Totes `import requests as _req` in `spieltage()` entfernt
+
+### Echte Bugs gefunden (Korrektur meines eigenen ersten Audits)
+`app_config`/`get_config()`/`set_config()` sind **nicht** totes Gerüst,
+wie zunächst vermutet – sie werden korrekt für den football-data.org-API-Key
+verwendet. Dabei aber zwei vorbestehende, echte Bugs gefunden und gefixt:
+- `admin_migration_update_webhook()` las `telegram_token` aus der falschen
+  Tabelle (`app_config` statt `config`) → das Feature "Telegram-Webhook nach
+  Domain-Umzug aktualisieren" war seit jeher funktionsunfähig.
+- `/cron/update/<token>` hatte nie ein Token, das sich irgendwo setzen ließ
+  → der Endpunkt war seit jeher unbenutzbar. Jetzt mit Auto-Token analog
+  zum Backup-Cron, URL sichtbar in den Admin-API-Einstellungen.
+
+### Struktur
+- Neue, korrekt benannte Abschnittsgrenze `ROUTEN – ADMIN: BACKUP,
+  SICHERHEIT & SYSTEM-KONFIGURATION` eingefügt – behebt die größte
+  Fehlzuordnung im Code (17 Admin-Routen lagen unter "Statistiken &
+  Analyse", u.a. das komplette Backup/Security/E-Mail)
+- Abschnitt „NEUE FEATURES" (nichtssagend) in „ROUTEN – ZUSATZFUNKTIONEN &
+  BENACHRICHTIGUNGEN" umbenannt
+- `cron_backup` und `cron_update` liegen jetzt zusammen im Code statt
+  2.500 Zeilen auseinander
+- `markdown` in `requirements.txt` ergänzt (wurde importiert, fehlte aber
+  in den Abhängigkeiten – auf frischem Server wäre die Doku-Ansicht ohne
+  ersichtlichen Grund nur als Rohtext statt formatiert erschienen)
+- Hartcodierter Navigations-Link in `admin/base.html` auf `url_for()`
+  umgestellt
+
+### UI-Konsistenz
+- Admin-Sidebar in fünf Gruppen gegliedert: Saison & Teilnehmer, Inhalte &
+  Archiv, Kommunikation, System, Dokumentation (vorher 13 Punkte als eine
+  flache Liste)
+- Hartcodierte Hex-Farben, wo technisch möglich, durch die bereits
+  vorhandenen CSS-Variablen ersetzt (`var(--bl-green)`, `var(--bl-red)`
+  etc.) in `head2head.html`, `rueckblick.html`, `archiv_ewige_tabelle.html`,
+  `admin/doku.html`, `admin/medien.html`. Bewusst NICHT angefasst:
+  Chart.js-Farbarrays (`verlauf.html`, `archiv_karriere.html`) und das
+  `theme-color`-Meta-Tag (`base.html`) – dort funktionieren CSS-Variablen
+  technisch nicht.
+- `/hilfe` (In-App-Hilfe) und `docs/BENUTZERHANDBUCH.md` (ausführliche
+  Referenz, admin-only unter `/admin/handbuch`) bewusst getrennt gelassen
+  (unterschiedlicher Zweck/Detailgrad), aber jetzt gegenseitig verlinkt –
+  der Link zur vollständigen Version erscheint auf `/hilfe` nur für Admins
+  (da `/admin/handbuch` für normale User ohnehin nicht erreichbar wäre)
+
+Alle Fixes gegen die bestehende Testsuite verifiziert (50 Tests, alle grün).
+
+---
+
+## [September 2026] – Backup-Bereich aufgeräumt & granulares Restore
 
 Vollständige Überprüfung des Backup/Restore-Bereichs auf Wunsch (Dopplungen,
 Übersichtlichkeit, Granularität). Ergebnisse und Fixes:
@@ -69,7 +134,7 @@ Re-Upload aller geänderten Dateien. Siehe UEBERGABE.md, neuer Abschnitt
 
 ---
 
-## [Aktuell] – September 2026 – Automatisches tägliches Backup
+## [September 2026] – Automatisches tägliches Backup
 
 Neue Funktion: automatische, tägliche Backups (DB + Medien + Config)
 landen als ZIP im neuen `backups/`-Verzeichnis (nicht im Git-Repo,

@@ -74,6 +74,39 @@
   </div>
 </div>
 
+<!-- Automatisches Tabellen-Update per externem Cron (optional) -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header">
+    <i class="bi bi-arrow-repeat me-2"></i>Tabellen-Update per externem Trigger (optional)
+  </div>
+  <div class="card-body">
+    <p class="text-muted small mb-3">
+      Tabelle & Punktestände aktualisieren sich bereits automatisch, sobald
+      jemand die Startseite besucht (mit kurzem Cache, siehe Datenprovider
+      oben). Für eine exaktere, von Seitenaufrufen unabhängige Aktualisierung
+      (z.&nbsp;B. alle 30 Minuten) kannst du optional diese URL per Plesk
+      „Geplante Aufgaben" (curl) oder einem Dienst wie cron-job.org aufrufen
+      lassen:
+    </p>
+    <div class="input-group input-group-sm mb-2">
+      <input type="text" class="form-control font-monospace" value="{{ update_cron_url }}" readonly
+             onclick="this.select()">
+      <button class="btn btn-outline-secondary" type="button"
+              onclick="navigator.clipboard.writeText('{{ update_cron_url }}')">
+        <i class="bi bi-clipboard"></i> Kopieren
+      </button>
+    </div>
+    <form method="POST" action="{{ url_for('admin_api_config') }}"
+          onsubmit="return confirm('Neues Token erzeugen? Die alte URL funktioniert danach nicht mehr.')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="regenerate_update_token">
+      <button type="submit" class="btn btn-outline-danger btn-sm">
+        <i class="bi bi-arrow-repeat me-1"></i>Token neu erzeugen
+      </button>
+    </form>
+  </div>
+</div>
+
 <!-- Push-Benachrichtigungen Status -->
 <div class="card shadow-sm mb-4">
   <div class="card-header d-flex justify-content-between align-items-center">

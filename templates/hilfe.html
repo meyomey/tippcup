@@ -47,6 +47,14 @@
   <a href="/admin/medien" class="text-muted">Medien</a>
 </div>
 
+{% if session.is_admin %}
+<div class="text-center text-muted small mb-4 no-print">
+  <i class="bi bi-book me-1"></i>
+  Ausführlichere, druckbare Referenz-Version:
+  <a href="{{ url_for('admin_handbuch') }}">Benutzerhandbuch (vollständig)</a>
+</div>
+{% endif %}
+
 {% endblock %}
 
 {% block scripts %}
