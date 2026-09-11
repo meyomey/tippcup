@@ -26,9 +26,37 @@
                  transition:width .2s ease;width:0% }
   </style>
   {% block head %}{% endblock %}
+  <!-- CSRF: Token global bereitstellen + automatisch in alle fetch()-POST/PUT/PATCH/DELETE-Requests einfügen -->
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <script>
+    (function () {
+      const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').content;
+      const origFetch  = window.fetch;
+      window.fetch = function (input, init) {
+        init = init || {};
+        const method = (init.method || 'GET').toUpperCase();
+        if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+          if (init.headers instanceof Headers) {
+            init.headers.set('X-CSRFToken', CSRF_TOKEN);
+          } else {
+            init.headers = Object.assign({}, init.headers, {'X-CSRFToken': CSRF_TOKEN});
+          }
+        }
+        return origFetch.call(this, input, init);
+      };
+    })();
+  </script>
 </head>
 <body>
 
+{% if session.get('impersonator_id') %}
+<div style="position:sticky;top:0;z-index:9999;background:#dc3545;color:#fff;text-align:center;padding:.4rem 1rem;font-size:.85rem;font-weight:600">
+  👁️ Vorschau als „{{ session.get('username') }}" &nbsp;|&nbsp;
+  <a href="{{ url_for('admin_stop_impersonate') }}" style="color:#fff;font-weight:700;text-decoration:underline">
+    ← Zurück zum Admin
+  </a>
+</div>
+{% endif %}
 <nav class="navbar navbar-expand-lg navbar-dark bg-bundesliga sticky-top">
   <div class="container-fluid">
     <a class="navbar-brand fw-bold" href="{{ url_for('dashboard') }}">
@@ -69,7 +97,13 @@
             <li><a class="dropdown-item {% if request.endpoint=='leaderboard' %}active{% endif %}"
                    href="{{ url_for('leaderboard') }}"><i class="bi bi-bar-chart-fill me-2"></i>Bestenliste</a></li>
             <li><a class="dropdown-item {% if request.endpoint=='tips' %}active{% endif %}"
-                   href="{{ url_for('tips') }}"><i class="bi bi-eye-fill me-2"></i>Alle Tipps</a></li>
+                   href="{{ url_for('tips') }}"><i class="bi bi-eye-fill me-2"></i>Alle Tipps
+              {% if not session.get('is_admin') and season and not season['tips_locked'] %}
+              <span class="badge bg-secondary ms-1" style="font-size:.65rem">gesperrt</span>
+              {% endif %}
+            </a></li>
+            <li><a class="dropdown-item {% if request.endpoint=='tipp_status' %}active{% endif %}"
+                   href="{{ url_for('tipp_status') }}"><i class="bi bi-clipboard-check me-2"></i>Tipp-Status</a></li>
             <li><a class="dropdown-item {% if request.endpoint=='profile' %}active{% endif %}"
                    href="{{ url_for('profile') }}"><i class="bi bi-person-check-fill me-2"></i>Meine Tipps</a></li>
             <li><hr class="dropdown-divider"></li>
@@ -80,7 +114,7 @@
 
         <!-- Analyse-Dropdown -->
         <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle {% if request.endpoint in ('angsthasen','teamstatistik','head2head','highlights','rueckblick','ewige_tabelle','badges','archiv','archiv_karriere','archiv_ewige_tabelle','archiv_angsthasen') %}active{% endif %}"
+          <a class="nav-link dropdown-toggle {% if request.endpoint in ('angsthasen','teamstatistik','head2head','highlights','rueckblick','ewige_tabelle','badges') %}active{% endif %}"
              href="#" data-bs-toggle="dropdown">
             <i class="bi bi-graph-up-arrow me-1"></i>Analyse
           </a>
@@ -101,8 +135,6 @@
                    href="{{ url_for('ewige_tabelle') }}"><i class="bi bi-stars me-2"></i>Ewige Tabelle</a></li>
             <li><a class="dropdown-item {% if request.endpoint=='rueckblick' %}active{% endif %}"
                    href="{{ url_for('rueckblick') }}"><i class="bi bi-journal-richtext me-2"></i>Saisonrückblick</a></li>
-            <li><a class="dropdown-item {% if request.endpoint in ('archiv','archiv_karriere') %}active{% endif %}"
-                   href="{{ url_for('archiv') }}"><i class="bi bi-clock-history me-2"></i>Archiv</a></li>
           </ul>
         </li>
 

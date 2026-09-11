@@ -49,7 +49,7 @@
     <p class="text-muted small mb-3">
       Erwartet: <code>Saison;Rang;Name;Abw_1L;Abw_2L;Abw_Ges;Abw_Gew;n_1L;k_1L;n_2L;k_2L</code>
     </p>
-    <form method="POST" enctype="multipart/form-data" class="d-flex gap-2 align-items-center flex-wrap">
+    <form method="POST" enctype="multipart/form-data" class="d-flex gap-2 align-items-center flex-wrap"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="import_angsthasen">
       <input type="file" name="csvfile" accept=".csv" class="form-control form-control-sm" style="max-width:320px" required>
       <button type="submit" class="btn btn-warning btn-sm">
@@ -72,7 +72,7 @@
       {# Saisons aus DB holen – wir nutzen all_names nicht, brauchen distinct seasons #}
     </div>
     <form method="POST" class="d-flex gap-2 align-items-center flex-wrap"
-          onsubmit="return confirm('Saison wirklich löschen?')">
+          onsubmit="return confirm('Saison wirklich löschen?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="delete_season">
       <select name="season_name" class="form-select form-select-sm" style="max-width:200px" required>
         <option value="">– Saison wählen –</option>
@@ -99,7 +99,7 @@
       Abw_2L, Stdabw_2L, MaxAbw_2L, Treffer_2L, Abw_Ges, Stdabw_Ges, MaxAbw_Ges, Treffer_Ges.
       Bereits vorhandene Einträge werden aktualisiert (Upsert).
     </p>
-    <form method="POST" enctype="multipart/form-data" class="d-flex gap-2 align-items-center flex-wrap">
+    <form method="POST" enctype="multipart/form-data" class="d-flex gap-2 align-items-center flex-wrap"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="import_csv">
       <input type="file" name="csvfile" accept=".csv" class="form-control form-control-sm" style="max-width:320px" required>
       <button type="submit" class="btn btn-bundesliga btn-sm">
@@ -116,7 +116,7 @@
     <i class="bi bi-person-gear me-2"></i>Name-Mapping – CSV-Namen → App-Benutzer
   </div>
   <div class="card-body p-0">
-    <form method="POST">
+    <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="save_map">
       <div class="table-responsive">
         <table class="table table-sm table-hover mb-0 align-middle">

@@ -24,12 +24,6 @@
       <div class="small text-muted">Saisons</div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
-    <div class="card text-center p-3 shadow-sm">
-      <div class="fs-4 fw-bold text-info">{{ stats.chat }}</div>
-      <div class="small text-muted">Chat-Nachrichten</div>
-    </div>
-  </div>
 </div>
 
 <div class="row g-4">
@@ -46,7 +40,7 @@
           Der Dateiname enthält Datum, Uhrzeit und gewählten Inhalt.
         </p>
 
-        <form method="POST" action="{{ url_for('admin_backup') }}">
+        <form method="POST" action="{{ url_for('admin_backup') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
           <div class="card mb-2 border-0 bg-light">
             <div class="card-body py-2 px-3 d-flex justify-content-between align-items-center">
@@ -57,7 +51,7 @@
                     <i class="bi bi-database me-1 text-primary"></i>Datenbank
                   </label>
                 </div>
-                <div class="text-muted small ms-4">Alle Tipps, User, Scores, Archiv, Chat</div>
+                <div class="text-muted small ms-4">Alle Tipps, User, Scores, Archiv</div>
               </div>
               <div class="text-end text-muted small">
                 {% if db_size >= 1048576 %}{{ "%.1f"|format(db_size/1048576) }} MB
@@ -125,7 +119,7 @@
 
         <form method="POST" action="{{ url_for('admin_restore') }}"
               enctype="multipart/form-data"
-              onsubmit="return confirm('Wirklich wiederherstellen? Aktuelle Daten werden überschrieben.')">
+              onsubmit="return confirm('Wirklich wiederherstellen? Aktuelle Daten werden überschrieben.')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
           <div class="mb-3">
             <label class="form-label fw-semibold">Backup-Datei</label>

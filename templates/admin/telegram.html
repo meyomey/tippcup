@@ -33,7 +33,7 @@
 <div class="card shadow-sm mb-4">
   <div class="card-header"><i class="bi bi-gear me-2"></i>Konfiguration</div>
   <div class="card-body">
-    <form method="POST">
+    <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="save">
       <div class="mb-3">
         <label class="form-label fw-semibold">Bot-Token
@@ -92,7 +92,7 @@
       Diese Nachrichten werden automatisch an die Telegram-Gruppe gesendet.
       Rangliste und Spieltag-Highlight werden nur gesendet wenn <strong>alle Spiele des Spieltags abgeschlossen</strong> sind.
     </p>
-    <form method="POST">
+    <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="save">
       <!-- Token/Chat-ID/Link unsichtbar mitsenden damit sie nicht gelöscht werden -->
       <input type="hidden" name="telegram_token" value="{{ telegram_token }}">
@@ -145,7 +145,7 @@
       <div class="card-body">
         <h6><i class="bi bi-send me-2"></i>Test-Nachricht</h6>
         <p class="small text-muted">Sendet eine Testnachricht an die Gruppe.</p>
-        <form method="POST">
+        <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="action" value="test">
           <button class="btn btn-sm btn-success" {% if not telegram_token %}disabled{% endif %}>
             <i class="bi bi-send me-1"></i>Test senden
@@ -166,13 +166,13 @@
           </span>
         </p>
         <div class="d-flex gap-2">
-          <form method="POST">
+          <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="set_webhook">
             <button class="btn btn-sm btn-primary" {% if not telegram_token %}disabled{% endif %}>
               <i class="bi bi-plug me-1"></i>Aktivieren
             </button>
           </form>
-          <form method="POST">
+          <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="delete_webhook">
             <button class="btn btn-sm btn-outline-secondary" {% if not telegram_token %}disabled{% endif %}>
               Entfernen
@@ -187,7 +187,7 @@
       <div class="card-body">
         <h6><i class="bi bi-bell me-2"></i>Tippschluss-Erinnerung</h6>
         <p class="small text-muted">Sendet Erinnerung mit Liste wer noch nicht getippt hat.</p>
-        <form method="POST">
+        <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="action" value="notify_deadline">
           <button class="btn btn-sm btn-warning" {% if not telegram_token or not season or not settings.notify_deadline %}disabled title="Deaktiviert in Einstellungen"{% endif %}>
             <i class="bi bi-bell me-1"></i>Erinnerung senden

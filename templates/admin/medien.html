@@ -45,7 +45,7 @@
       </div>
       <div class="collapse show" id="uploadForm">
         <div class="card-body p-2">
-          <form method="POST" enctype="multipart/form-data">
+          <form method="POST" enctype="multipart/form-data"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="upload">
             <div class="mb-2">
               <select name="folder_id" class="form-select form-select-sm" id="uploadFolderSel">
@@ -91,7 +91,7 @@
       <!-- Neuer Ordner -->
       <div class="collapse" id="newFolderForm">
         <div class="p-2 border-bottom">
-          <form method="POST">
+          <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="add_folder">
             <input type="text" name="name" class="form-control form-control-sm mb-1"
                    placeholder="Name" required>
@@ -207,7 +207,7 @@
       <div class="card shadow-sm">
         <div class="card-header bg-dark text-white"><i class="bi bi-plus-circle me-2"></i>Link hinzufügen</div>
         <div class="card-body">
-          <form method="POST">
+          <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="add_link">
             <div class="mb-2"><label class="form-label small fw-semibold">Titel *</label>
               <input type="text" name="title" class="form-control form-control-sm" required></div>
@@ -258,7 +258,7 @@
                         onclick="editLink({{ lnk.id }},'{{ lnk.title|e }}','{{ lnk.url|e }}','{{ lnk.description|e }}','{{ lnk.icon }}',{{ lnk.is_active }})">
                   <i class="bi bi-pencil" style="font-size:.75rem"></i>
                 </button>
-                <form method="POST" onsubmit="return confirm('Link löschen?')">
+                <form method="POST" onsubmit="return confirm('Link löschen?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <input type="hidden" name="action" value="delete_link">
                   <input type="hidden" name="link_id" value="{{ lnk.id }}">
                   <button class="btn btn-sm btn-outline-danger py-0 px-1">
@@ -281,7 +281,7 @@
 </div>{# end tab-content #}
 
 <!-- Ordner löschen -->
-<form method="POST" id="deleteFolderForm">
+<form method="POST" id="deleteFolderForm"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="action" value="delete_folder">
   <input type="hidden" name="folder_id" id="deleteFolderID">
 </form>
@@ -289,7 +289,7 @@
 <!-- Link bearbeiten Modal -->
 <div class="modal fade" id="editLinkModal" tabindex="-1">
   <div class="modal-dialog"><div class="modal-content">
-    <form method="POST">
+    <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="edit_link">
       <input type="hidden" name="link_id" id="editLinkId">
       <div class="modal-header"><h5 class="modal-title">Link bearbeiten</h5>

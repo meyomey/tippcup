@@ -57,6 +57,10 @@
            class="list-group-item list-group-item-action {% if request.endpoint == 'admin_archiv_import' %}active{% endif %}">
           <i class="bi bi-clock-history me-2"></i>Tipp-Archiv
         </a>
+        <a href="{{ url_for('admin_migration') }}"
+           class="list-group-item list-group-item-action {% if 'migration' in (request.endpoint or '') %}active{% endif %}">
+          <i class="bi bi-arrow-left-right me-2"></i>Domain-Migration
+        </a>
         <div class="list-group-item px-3 py-1 text-muted" style="font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;background:transparent">Dokumentation</div>
         <a href="{{ url_for('admin_handbuch') }}"
            class="list-group-item list-group-item-action {% if request.endpoint == 'admin_handbuch' %}active{% endif %}">

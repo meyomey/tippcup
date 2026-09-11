@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Tipp-Status{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="mb-0"><i class="bi bi-clipboard-check me-2"></i>Tipp-Status</h4>
+  <span class="badge bg-bundesliga fs-6">{{ done_count }}/{{ total_users }} abgegeben</span>
+</div>
+
+{# Fortschrittsbalken #}
+<div class="progress mb-3" style="height:1.1rem">
+  <div class="progress-bar bg-success" style="width:{{ (done_count/total_users*100)|int if total_users else 0 }}%">
+    {{ done_count }}/{{ total_users }}
+  </div>
+</div>
+
+{# Deadlines #}
+{% if dl_bl1 or dl_bl2 %}
+<div class="row g-2 mb-3">
+  {% if dl_bl2 %}
+  <div class="col-12 col-sm-6">
+    <div class="card border-0 bg-light py-2 px-3 d-flex flex-row align-items-center gap-2">
+      <i class="bi bi-clock-fill text-secondary"></i>
+      <div>
+        <div class="small text-muted">Tippschluss 2. Liga</div>
+        <div class="fw-semibold">{{ dl_bl2[:10] if dl_bl2 is string else dl_bl2.strftime('%d.%m.%Y') }}
+          {{ dl_bl2[11:16] if dl_bl2 is string else dl_bl2.strftime('%H:%M') }} Uhr
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  {% if dl_bl1 %}
+  <div class="col-12 col-sm-6">
+    <div class="card border-0 bg-light py-2 px-3 d-flex flex-row align-items-center gap-2">
+      <i class="bi bi-clock-fill text-dark"></i>
+      <div>
+        <div class="small text-muted">Tippschluss 1. Liga</div>
+        <div class="fw-semibold">{{ dl_bl1[:10] if dl_bl1 is string else dl_bl1.strftime('%d.%m.%Y') }}
+          {{ dl_bl1[11:16] if dl_bl1 is string else dl_bl1.strftime('%H:%M') }} Uhr
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# Tabelle #}
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover table-sm mb-0 align-middle">
+      <thead class="table-light">
+        <tr>
+          <th class="sortable" data-col="0" style="cursor:pointer">Spieler <i class="bi bi-arrow-down-up opacity-50" style="font-size:.65rem"></i></th>
+          <th class="text-center">Status</th>
+          <th class="text-center d-none d-sm-table-cell sortable" data-col="2" style="cursor:pointer">Teams <i class="bi bi-arrow-down-up opacity-50" style="font-size:.65rem"></i></th>
+          <th class="text-center d-none d-md-table-cell sortable" data-col="3" style="cursor:pointer">Zuletzt gespeichert <i class="bi bi-arrow-down-up opacity-50" style="font-size:.65rem"></i></th>
+          <th class="text-center d-none d-lg-table-cell">Vor BL2-Schluss</th>
+          <th class="text-center d-none d-lg-table-cell">Vor BL1-Schluss</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr class="{{ 'table-success' if r.complete else 'table-warning' }}">
+          <td class="fw-semibold">{{ r.user.display_name or r.user.username }}</td>
+          <td class="text-center">
+            {% if r.complete %}
+              <span class="badge bg-success">✅ Abgegeben</span>
+            {% elif r.count > 0 %}
+              <span class="badge bg-warning text-dark">⚠️ Unvollständig</span>
+            {% else %}
+              <span class="badge bg-danger">❌ Fehlt</span>
+            {% endif %}
+          </td>
+          <td class="text-center d-none d-sm-table-cell text-muted" data-sort="{{ r.count }}">
+            {{ r.count }}/36
+          </td>
+          <td class="text-center d-none d-md-table-cell text-muted small" data-sort="{{ r.last_tip or '' }}">
+            {% if r.last_tip %}
+              {{ r.last_tip[:10] }} {{ r.last_tip[11:16] }}
+            {% else %}–{% endif %}
+          </td>
+          <td class="text-center d-none d-lg-table-cell">
+            {% if not dl_bl2 %}
+              <span class="text-muted">–</span>
+            {% elif not r.last_tip %}
+              <span class="badge bg-danger">❌</span>
+            {% elif r.on_time_bl2 %}
+              <span class="badge bg-success">✅</span>
+            {% else %}
+              <span class="badge bg-danger">❌ zu spät</span>
+            {% endif %}
+          </td>
+          <td class="text-center d-none d-lg-table-cell">
+            {% if not dl_bl1 %}
+              <span class="text-muted">–</span>
+            {% elif not r.last_tip %}
+              <span class="badge bg-secondary">ausstehend</span>
+            {% elif r.on_time_bl1 %}
+              <span class="badge bg-success">✅</span>
+            {% else %}
+              <span class="badge bg-danger">❌ zu spät</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<p class="text-muted small mt-3">
+  <i class="bi bi-info-circle me-1"></i>
+  „Zuletzt gespeichert" ist der Zeitpunkt der letzten Tipp-Änderung (nicht der ersten Abgabe).
+  Unvollständig = weniger als 36 Teams getippt.
+</p>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const tbody = document.querySelector('table tbody');
+  let lastCol = null, asc = true;
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = parseInt(th.dataset.col);
+      asc = (lastCol === col) ? !asc : true;
+      lastCol = col;
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      rows.sort((a, b) => {
+        const ca = a.cells[col], cb = b.cells[col];
+        const va = ca ? (ca.dataset.sort || ca.innerText.trim()) : '';
+        const vb = cb ? (cb.dataset.sort || cb.innerText.trim()) : '';
+        return asc ? va.localeCompare(vb, 'de', {numeric:true})
+                   : vb.localeCompare(va, 'de', {numeric:true});
+      });
+      rows.forEach(r => tbody.appendChild(r));
+      document.querySelectorAll('th.sortable i').forEach(i => i.className = 'bi bi-arrow-down-up opacity-50');
+      th.querySelector('i').className = 'bi bi-arrow-' + (asc ? 'up' : 'down');
+    });
+  });
+})();
+</script>
+{% endblock %}

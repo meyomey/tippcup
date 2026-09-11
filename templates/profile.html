@@ -42,7 +42,7 @@
     <div class="card shadow-sm mt-3">
       <div class="card-header"><i class="bi bi-pencil me-2"></i>Daten ändern</div>
       <div class="card-body">
-        <form method="POST">
+        <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div class="mb-2">
             <label class="form-label small fw-semibold">Spielername <span class="text-muted fw-normal">(Anzeigename)</span></label>
             <input type="text" name="display_name" class="form-control form-control-sm"

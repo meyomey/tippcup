@@ -28,13 +28,13 @@
             <i class="bi bi-database me-1"></i>Daten & Auswertung
           </div>
           <div class="card-body d-flex flex-column gap-2 py-3">
-            <form method="POST"><input type="hidden" name="action" value="update_standings">
+            <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="update_standings">
               <button class="btn btn-primary w-100"><i class="bi bi-arrow-clockwise me-1"></i>Beide Tabellen abrufen</button>
             </form>
-            <form method="POST"><input type="hidden" name="action" value="recalculate">
+            <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="recalculate">
               <button class="btn btn-outline-success w-100"><i class="bi bi-calculator me-1"></i>Punkte neu berechnen</button>
             </form>
-            <form method="POST" onsubmit="return confirm('Alle bisherigen Verlaufs-Snapshots löschen?\n\nHistorische Verläufe können nicht wiederhergestellt werden.')">
+            <form method="POST" onsubmit="return confirm('Alle bisherigen Verlaufs-Snapshots löschen?\n\nHistorische Verläufe können nicht wiederhergestellt werden.')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="action" value="reset_snapshots">
               <button class="btn btn-outline-warning w-100"><i class="bi bi-arrow-counterclockwise me-1"></i>Verlauf zurücksetzen</button>
             </form>
@@ -77,14 +77,14 @@
             <i class="bi bi-pencil-square me-1"></i>Tippabgabe
           </div>
           <div class="card-body d-flex flex-column gap-2 py-3">
-            <form method="POST" onsubmit="return confirm('Saisonstatus ändern?')">
+            <form method="POST" onsubmit="return confirm('Saisonstatus ändern?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="action" value="toggle_started">
               <button class="btn {% if season.season_started %}btn-outline-warning{% else %}btn-warning{% endif %} w-100">
                 <i class="bi bi-{% if season.season_started %}pause-fill{% else %}play-fill{% endif %} me-1"></i>
                 {% if season.season_started %}Saison stoppen{% else %}Saison starten{% endif %}
               </button>
             </form>
-            <form method="POST"><input type="hidden" name="action" value="toggle_lock">
+            <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="toggle_lock">
               <button class="btn {% if season.tips_locked %}btn-outline-success{% else %}btn-danger{% endif %} w-100">
                 <i class="bi bi-{% if season.tips_locked %}unlock{% else %}lock{% endif %}-fill me-1"></i>
                 Tippabgabe {% if season.tips_locked %}öffnen{% else %}sperren{% endif %}
@@ -102,10 +102,10 @@
           </div>
           <div class="card-body d-flex flex-column gap-2 py-3">
             <form method="POST" action="{{ url_for('admin_send_reminder') }}"
-                  onsubmit="return confirm('Erinnerungsmail an alle ohne Tipp senden?')">
+                  onsubmit="return confirm('Erinnerungsmail an alle ohne Tipp senden?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button class="btn btn-outline-info w-100"><i class="bi bi-envelope me-1"></i>Erinnerungsmail senden</button>
             </form>
-            <form method="POST"><input type="hidden" name="action" value="fetch_deadlines">
+            <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="fetch_deadlines">
               <button class="btn btn-outline-info w-100">
                 <i class="bi bi-clock me-1"></i>Tippschluss laden
                 <small class="d-block opacity-75" style="font-size:.7rem">
@@ -161,7 +161,7 @@
     <div class="row g-3">
       <div class="col-12 col-md-6">
         <p class="fw-semibold mb-2"><i class="bi bi-cloud-download me-1"></i>Automatisch laden ({{ 'football-data.org' if 'football-data' in api_provider else 'OpenligaDB' }}):</p>
-        <form method="POST">
+        <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="action" value="fetch_deadlines">
           <button class="btn btn-outline-info btn-sm">
             <i class="bi bi-clock me-1"></i>Tippschluss jetzt abrufen
@@ -171,7 +171,7 @@
       </div>
       <div class="col-12 col-md-6">
         <p class="fw-semibold mb-2"><i class="bi bi-pencil me-1"></i>Manuell setzen (falls API nicht erreichbar):</p>
-        <form method="POST" class="row g-2">
+        <form method="POST" class="row g-2"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="action" value="set_deadline">
           <div class="col-12">
             <label class="form-label small">1. Bundesliga – erstes Spiel</label>
@@ -199,7 +199,7 @@
   <div class="card-header bg-dark text-white"><i class="bi bi-plus-circle me-2"></i>Neue Saison anlegen</div>
   <div class="card-body">
     <div class="alert alert-warning py-2 mb-3"><i class="bi bi-exclamation-triangle me-2"></i>Eine neue Saison deaktiviert die aktuelle. Alte Daten bleiben erhalten.</div>
-    <form method="POST" class="row g-2 align-items-end" onsubmit="return confirm('Neue Saison anlegen?')">
+    <form method="POST" class="row g-2 align-items-end" onsubmit="return confirm('Neue Saison anlegen?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="create">
       <div class="col-12 col-sm-4"><label class="form-label small fw-semibold">Startjahr *</label>
         <input type="number" name="year" class="form-control" required placeholder="z.B. 2025" min="2020" max="2040"></div>
@@ -226,12 +226,12 @@
           <td class="text-center text-muted small">{{ s.created_at[:10] }}</td>
           <td class="text-center d-flex gap-1 justify-content-center">
             {% if not s.is_active %}
-            <form method="POST" onsubmit="return confirm('Aktivieren?')">
+            <form method="POST" onsubmit="return confirm('Aktivieren?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="action" value="activate">
               <input type="hidden" name="season_id" value="{{ s.id }}">
               <button class="btn btn-sm btn-outline-primary">Aktivieren</button>
             </form>
-            <form method="POST" onsubmit="return confirm('Saison „{{ s.name }}" wirklich löschen?\n\nAlle Tipps, Standings und Scores dieser Saison werden unwiderruflich gelöscht.')">
+            <form method="POST" onsubmit="return confirm('Saison „{{ s.name }}" wirklich löschen?\n\nAlle Tipps, Standings und Scores dieser Saison werden unwiderruflich gelöscht.')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="action" value="delete_season">
               <input type="hidden" name="season_id" value="{{ s.id }}">
               <button class="btn btn-sm btn-outline-danger" title="Saison löschen">

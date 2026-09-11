@@ -123,6 +123,9 @@
                 </td>
                 <td class="text-center fw-bold">
                   {{ p.predicted_rank }}
+                  {% if p.is_auto %}
+                  <i class="bi bi-dice-5 text-muted" title="Automatisch generiert (kein Tipp abgegeben)"></i>
+                  {% endif %}
                 </td>
                 {% if season and season.season_started %}
                 <td class="text-center">

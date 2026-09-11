@@ -10,7 +10,7 @@
     <div class="card shadow-sm">
       <div class="card-header bg-dark text-white"><i class="bi bi-plus-circle me-2"></i>Link hinzufügen</div>
       <div class="card-body">
-        <form method="POST">
+        <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="action" value="add">
           <div class="mb-3">
             <label class="form-label fw-semibold">Titel <span class="text-danger">*</span></label>
@@ -80,7 +80,7 @@
                       title="Bearbeiten">
                 <i class="bi bi-pencil" style="font-size:.75rem"></i>
               </button>
-              <form method="POST" onsubmit="return confirm('Link löschen?')">
+              <form method="POST" onsubmit="return confirm('Link löschen?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="link_id" value="{{ lnk.id }}">
                 <button class="btn btn-sm btn-outline-danger py-0 px-2" title="Löschen">
@@ -105,7 +105,7 @@
 <div class="modal fade" id="editModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
-      <form method="POST">
+      <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="action" value="edit">
         <input type="hidden" name="link_id" id="editId">
         <div class="modal-header">

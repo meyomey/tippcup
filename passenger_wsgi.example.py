@@ -8,8 +8,8 @@ ANLEITUNG:
   2. Alle Pflichtfelder ausfüllen
   3. Datei NICHT ins Git-Repository einchecken (steht in .gitignore)
 
-Pfad auf dem Server (Beispiel):
-  /var/www/vhosts/hosting12345.a2e64.netcup.net/liga.tippcup.com/tippspiel/
+Pfad auf dem Server (Beispiel tippcup.com):
+  /var/www/vhosts/hosting12345.a2e64.netcup.net/tippcup.com/tippspiel/
 """
 
 import sys, os
@@ -28,18 +28,17 @@ if os.path.isdir(vendor_dir):
 os.environ['SECRET_KEY'] = 'HIER_DEIN_GEHEIMER_SCHLUESSEL_EINTRAGEN'
 
 # DB_PATH: Absoluter Pfad zur SQLite-Datenbank
+# WICHTIG bei Domain-Umzug: auf neuen Pfad anpassen!
 os.environ['DB_PATH'] = os.path.join(BASE_DIR, 'tippspiel.db')
 
 # ── VAPID-Keys für Web-Push-Benachrichtigungen ───────────────────────────────
-# Erzeugen: python3 -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print(v.private_pem().decode()); print(v.public_key.public_bytes(...))"
-# Oder über: https://web-push-codelab.glitch.me/
-#
-# Wenn hier leer gelassen, werden die Fallback-Werte aus app.py verwendet.
-# Für Produktion: Keys hier eintragen und Fallbacks in app.py entfernen.
+# WICHTIG: Bei Domain-Umzug DIESELBEN Keys behalten!
+# Neue Keys = alle Push-Subscriptions ungültig.
+# Keys aus der alten passenger_wsgi.py übernehmen.
 #
 # os.environ['VAPID_PRIVATE_KEY'] = 'dein-base64-private-key'
 # os.environ['VAPID_PUBLIC_KEY']  = 'dein-base64-public-key'
-# os.environ['VAPID_EMAIL']       = 'mailto:admin@deine-domain.de'
+# os.environ['VAPID_EMAIL']       = 'mailto:admin@tippcup.com'
 # os.environ['VAPID_KEY_VERSION'] = 'v2'
 
 # ── Debug-Modus (NUR lokal, nie in Produktion!) ──────────────────────────────

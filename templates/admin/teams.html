@@ -4,11 +4,11 @@
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <h4><i class="bi bi-shield-fill me-2"></i>Teams verwalten</h4>
   <div class="d-flex gap-2 flex-wrap">
-    <form method="POST" action="{{ url_for('admin_import_both') }}" onsubmit="return confirm('Beide Ligen importieren?\nBL1: {% if "football-data" in api_provider %}football-data.org{% else %}OpenligaDB{% endif %}\nBL2: OpenligaDB')">
+    <form method="POST" action="{{ url_for('admin_import_both') }}" onsubmit="return confirm('Beide Ligen importieren?\nBL1: {% if "football-data" in api_provider %}football-data.org{% else %}OpenligaDB{% endif %}\nBL2: OpenligaDB')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="btn btn-success btn-sm"><i class="bi bi-cloud-download me-1"></i>Beide Ligen importieren</button>
     </form>
     <form method="POST" action="{{ url_for('admin_repair_tips') }}"
-          title="Tipp-Verknüpfungen nach Team-Änderungen reparieren">
+          title="Tipp-Verknüpfungen nach Team-Änderungen reparieren"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="btn btn-outline-warning btn-sm">
         <i class="bi bi-wrench me-1"></i>Tipps reparieren
       </button>
@@ -30,12 +30,12 @@
       <div class="card-header {% if lg_key=='bl1' %}bg-dark{% else %}bg-secondary{% endif %} text-white d-flex justify-content-between align-items-center">
         <span><i class="bi bi-shield-fill me-2"></i>{{ lg_name }} ({{ teams[lg_key]|length }})</span>
         <div class="d-flex gap-1">
-          <form method="POST" action="{{ url_for('admin_import_teams') }}" class="d-inline" onsubmit="return confirm('{{ lg_name }} importieren?')">
+          <form method="POST" action="{{ url_for('admin_import_teams') }}" class="d-inline" onsubmit="return confirm('{{ lg_name }} importieren?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="league" value="{{ lg_key }}">
             <button class="btn btn-sm btn-light" title="Von {% if lg_key == 'bl1' and 'football-data' in api_provider %}football-data.org{% else %}OpenligaDB{% endif %} laden"><i class="bi bi-cloud-download"></i></button>
           </form>
           {% if teams[lg_key] %}
-          <form method="POST" action="{{ url_for('admin_import_teams') }}" class="d-inline">
+          <form method="POST" action="{{ url_for('admin_import_teams') }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="league" value="{{ lg_key }}">
             <button class="btn btn-sm btn-light" title="Von {% if lg_key == 'bl1' and 'football-data' in api_provider %}football-data.org{% else %}OpenligaDB{% endif %} neu laden (Tipps bleiben erhalten)">
               <i class="bi bi-arrow-clockwise"></i>
@@ -57,7 +57,7 @@
               <td>{% if t.logo_url %}<img src="{{ t.logo_url }}" style="width:16px;height:16px;object-fit:contain" class="me-1">{% endif %}{{ t.name }}</td>
               <td class="d-none d-md-table-cell text-muted">{{ t.short_name or '–' }}</td>
               <td>
-                <form method="POST" action="{{ url_for('admin_delete_team', tid=t.id) }}" class="d-inline" onsubmit="return confirm('{{ t.name }} löschen?')">
+                <form method="POST" action="{{ url_for('admin_delete_team', tid=t.id) }}" class="d-inline" onsubmit="return confirm('{{ t.name }} löschen?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button class="btn btn-outline-danger btn-sm py-0 px-1"><i class="bi bi-trash"></i></button>
                 </form>
               </td>
@@ -74,7 +74,7 @@
 
       <!-- Einzeln hinzufügen -->
       <div class="card-footer p-2 border-top">
-        <form method="POST" action="{{ url_for('admin_add_team') }}" class="d-flex gap-2 align-items-center flex-wrap">
+        <form method="POST" action="{{ url_for('admin_add_team') }}" class="d-flex gap-2 align-items-center flex-wrap"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="league" value="{{ lg_key }}">
           <input type="text" name="name" class="form-control form-control-sm" placeholder="Teamname"
                  list="suggestions_{{ lg_key }}" required style="min-width:150px">
@@ -106,7 +106,7 @@
             {{ suggestions[lg_key]|length }} Vorschläge aus Vorjahren verfügbar — auf „Vorjahr einfügen" klicken.</span>
             {% endif %}
           </p>
-          <form method="POST" action="{{ url_for('admin_manual_bulk_teams') }}">
+          <form method="POST" action="{{ url_for('admin_manual_bulk_teams') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="league" value="{{ lg_key }}">
             <textarea name="bulk_teams" class="form-control form-control-sm font-monospace mb-2"
                       rows="10" id="bulk_{{ lg_key }}_ta"

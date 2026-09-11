@@ -69,20 +69,32 @@
   </div>
 </div>
 
-<form method="POST" id="predictForm">
+<form method="POST" id="predictForm"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <div class="row g-3">
   {% for lg_key, lg_name in leagues.items() %}
+  {% set is_locked = lg_key in locked_leagues %}
   <div class="col-12 col-xl-6">
-    <div class="card shadow-sm h-100">
+    <div class="card shadow-sm h-100 {% if is_locked %}opacity-75{% endif %}">
       <div class="card-header fw-bold
         {% if lg_key == 'bl1' %}bg-dark text-white{% else %}bg-secondary text-white{% endif %}">
         <i class="bi bi-shield-fill me-2"></i>{{ lg_name }}
         <span class="badge bg-light text-dark ms-2">{{ teams[lg_key]|length }} Teams</span>
+        {% if is_locked %}
+        <span class="badge bg-danger ms-2"><i class="bi bi-lock-fill me-1"></i>Gesperrt</span>
+        {% endif %}
       </div>
+      {% if is_locked %}
+      <div class="alert alert-warning mb-0 rounded-0 py-2 px-3" style="font-size:.85rem">
+        <i class="bi bi-lock-fill me-1"></i>
+        Tippschluss für die {{ lg_name }} ist abgelaufen – diese Liga kann nicht mehr geändert werden.
+      </div>
+      {% endif %}
       <div class="card-body p-2">
-        <div id="list_{{ lg_key }}" class="sortable-list">
+        <div id="list_{{ lg_key }}" class="sortable-list {% if is_locked %}pe-none{% endif %}"
+             style="{% if is_locked %}user-select:none;{% endif %}">
           {% for team in teams[lg_key] %}
-          <div class="sortable-item" data-id="{{ team.id }}" data-league="{{ lg_key }}">
+          <div class="sortable-item{% if is_locked %} sortable-item-locked{% endif %}"
+               data-id="{{ team.id }}" data-league="{{ lg_key }}">
             <div class="rank-badge" id="badge_{{ team.id }}">{{ existing.get(team.id, loop.index) }}</div>
             <div class="team-logo">
               {% if team.logo_url %}<img src="{{ team.logo_url }}" alt="" onerror="this.style.display='none'">
@@ -99,33 +111,48 @@
               </span>
               {% endif %}
             </div>
+            {% if not is_locked %}
             <div class="drag-handle"><i class="bi bi-grip-vertical text-muted"></i></div>
+            {% else %}
+            <div class="drag-handle text-muted opacity-25"><i class="bi bi-lock-fill"></i></div>
+            {% endif %}
           </div>
           {% endfor %}
         </div>
       </div>
       <div class="card-footer d-flex justify-content-between align-items-center py-1">
-        <small class="text-muted" id="status_{{ lg_key }}">Bereit</small>
+        <small class="text-muted" id="status_{{ lg_key }}">{% if is_locked %}Gesperrt{% else %}Bereit{% endif %}</small>
+        {% if not is_locked %}
         <button type="button" class="btn btn-outline-secondary btn-sm" onclick="shuffle('{{ lg_key }}')">
           <i class="bi bi-shuffle"></i>
         </button>
+        {% endif %}
       </div>
     </div>
   </div>
   {% endfor %}
 </div>
 
-<!-- Hidden inputs -->
+<!-- Hidden inputs (nur nicht gesperrte Ligen) -->
 {% for lg_key, lg_name in leagues.items() %}
+{% if lg_key not in locked_leagues %}
 {% for team in teams[lg_key] %}
 <input type="hidden" name="rank_{{ team.id }}" id="input_{{ team.id }}" value="{{ existing.get(team.id, loop.index) }}">
 {% endfor %}
+{% endif %}
 {% endfor %}
 
 <div class="d-flex gap-2 flex-wrap mt-4">
+  {% if locked_leagues | length < leagues | length %}
   <button type="submit" class="btn btn-bundesliga btn-lg">
-    <i class="bi bi-check-circle-fill me-2"></i>Tipp speichern
+    <i class="bi bi-check-circle-fill me-2"></i>
+    {% if locked_leagues %}
+      {% set open_names = [] %}
+      {% for lg_key, lg_name in leagues.items() %}{% if lg_key not in locked_leagues %}{% set _ = open_names.append(lg_name) %}{% endif %}{% endfor %}
+      Tipp für {{ open_names | join(' + ') }} speichern
+    {% else %}Tipp speichern{% endif %}
   </button>
+  {% endif %}
   <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-lg">
     <i class="bi bi-x-circle me-2"></i>Abbrechen
   </a>

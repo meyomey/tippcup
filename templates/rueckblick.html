@@ -65,7 +65,7 @@
             <th class="text-center d-none d-sm-table-cell">BL2</th>
             <th class="text-center d-none d-md-table-cell">Abw.</th>
             <th class="text-center d-none d-md-table-cell">🎯</th>
-            <th class="text-center d-none d-lg-table-cell" colspan="2">Max Abw. BL1 · BL2</th>
+            <th class="text-center d-none d-lg-table-cell">Max</th>
             <th class="text-center d-none d-lg-table-cell">σ</th>
           </tr>
         </thead>
@@ -87,29 +87,13 @@
             <td class="text-center d-none d-sm-table-cell">{{ s.score_bl2 }}</td>
             <td class="text-center d-none d-md-table-cell text-muted">{{ s.total_deviation }}</td>
             <td class="text-center d-none d-md-table-cell">{{ s.volltreffer or 0 }}</td>
-            {% set md1 = max_dev_map.get(s.id, {}).get('bl1') %}
-            {% set md2 = max_dev_map.get(s.id, {}).get('bl2') %}
-            <td class="text-center d-none d-lg-table-cell" style="font-size:.8rem">
-              {% if md1 %}
-              <span class="badge {% if md1.dev<=3 %}bg-success{% elif md1.dev<=8 %}bg-warning text-dark{% else %}bg-danger{% endif %}{% if s.id in wildcard_bl1_ids %} border border-2 border-warning{% endif %}"
-                    title="{{ md1.team }}: Tipp {{ md1.tipp }}. – Ist {{ md1.actual }}.">
-                {% if s.id in wildcard_bl1_ids %}🎲 {% endif %}BL1 {{ md1.dev }}
+            <td class="text-center d-none d-lg-table-cell">
+              <span class="badge {% if (s.max_deviation or 0)<=3 %}bg-success{% elif (s.max_deviation or 0)<=8 %}bg-warning text-dark{% else %}bg-danger{% endif %}
+                {% if s.id == wildcard_id %}border border-2 border-danger{% endif %}">
+                {% if s.id == wildcard_id %}🎲 {% endif %}{{ s.max_deviation or 0 }}
               </span>
-              <div class="text-muted mt-1" style="font-size:.7rem;max-width:7rem;margin:0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ md1.team }}</div>
-              {% if s.id in wildcard_bl1_ids %}<div class="text-danger fw-bold" style="font-size:.65rem">höchste!</div>{% endif %}
-              {% else %}–{% endif %}
             </td>
-            <td class="text-center d-none d-lg-table-cell" style="font-size:.8rem">
-              {% if md2 %}
-              <span class="badge {% if md2.dev<=3 %}bg-success{% elif md2.dev<=8 %}bg-warning text-dark{% else %}bg-danger{% endif %}{% if s.id in wildcard_bl2_ids %} border border-2 border-warning{% endif %}"
-                    title="{{ md2.team }}: Tipp {{ md2.tipp }}. – Ist {{ md2.actual }}.">
-                {% if s.id in wildcard_bl2_ids %}🎲 {% endif %}BL2 {{ md2.dev }}
-              </span>
-              <div class="text-muted mt-1" style="font-size:.7rem;max-width:7rem;margin:0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ md2.team }}</div>
-              {% if s.id in wildcard_bl2_ids %}<div class="text-danger fw-bold" style="font-size:.65rem">höchste!</div>{% endif %}
-              {% else %}–{% endif %}
-            </td>
-            <td class="text-center d-none d-lg-table-cell text-muted small">{{ '%.2f'|format(s.std_deviation or 0) }}</td>
+            <td class="text-center d-none d-lg-table-cell text-muted small">{{ '%.3f'|format(s.std_deviation or 0) }}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -194,7 +178,146 @@
 </div>
 {% endif %}
 
-<!-- ══ 4. EWIGE TABELLE ════════════════════════ -->
+<!-- ══ 5. SPIELTAG-HIGHLIGHTS ═════════════════ -->
+{% if highlights %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-warning text-dark">
+    <i class="bi bi-star-fill me-2"></i>Spieltag-Highlights
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-dark">
+        <tr>
+          <th class="text-center">Spieltag</th><th>🏅 Bester Tipper</th>
+          <th class="text-center">Punkte +</th>
+          <th class="text-center d-none d-sm-table-cell">Platz</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in highlights %}
+        <tr>
+          <td class="text-center fw-bold">{{ h.matchday }}.</td>
+          <td>🏅 {{ h.display_name or h.username }}</td>
+          <td class="text-center fw-bold text-success">+{{ h.improvement }}</td>
+          <td class="text-center d-none d-sm-table-cell text-muted small">
+            {% if h.rank_before and h.rank_after %}
+            {{ h.rank_before }}. → <span class="{% if h.rank_after < h.rank_before %}text-success fw-bold{% endif %}">{{ h.rank_after }}.</span>
+            {% if h.rank_after < h.rank_before %}(▲{{ h.rank_before - h.rank_after }}){% endif %}
+            {% else %}–{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- ══ 6. VOLLTREFFER-KÖNIG ══════════════════════ -->
+{% if volltreffer_koenige %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-success text-white">
+    <i class="bi bi-bullseye me-2"></i>Volltreffer-König
+  </div>
+  <div class="card-body py-2">
+    <div class="d-flex flex-wrap gap-3 align-items-center">
+      {% for s in volltreffer_koenige %}
+      <div class="text-center">
+        <div class="fs-2">🎯</div>
+        <div class="fw-bold">{{ s.display_name or s.username }}</div>
+        <div class="text-muted small">{{ s.volltreffer }} Volltreffer</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- ══ 7. AUFSTEIGER / ABSTEIGER ════════════════ -->
+{% if aufsteiger or absteiger %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-bundesliga text-white">
+    <i class="bi bi-arrow-down-up me-2"></i>Größter Aufsteiger / Absteiger
+  </div>
+  <div class="card-body">
+    <div class="row g-3">
+      {% if aufsteiger %}
+      <div class="col-12 col-md-6 text-center">
+        <div class="fs-2">📈</div>
+        <div class="fw-bold fs-5">{{ aufsteiger.name }}</div>
+        <div class="text-success fw-semibold">▲ {{ aufsteiger.gain }} Plätze</div>
+        <div class="text-muted small">Rang {{ aufsteiger.from }}. → {{ aufsteiger.to }}.</div>
+      </div>
+      {% endif %}
+      {% if absteiger %}
+      <div class="col-12 col-md-6 text-center">
+        <div class="fs-2">📉</div>
+        <div class="fw-bold fs-5">{{ absteiger.name }}</div>
+        <div class="text-danger fw-semibold">▼ {{ absteiger.gain|abs }} Plätze</div>
+        <div class="text-muted small">Rang {{ absteiger.from }}. → {{ absteiger.to }}.</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- ══ 8. ZU SPÄT / NACHFRIST ═══════════════════ -->
+{% if zu_spaet %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-danger text-white">
+    <i class="bi bi-clock-history me-2"></i>Zu spät / Nachfrist
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0 align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Spieler</th>
+          <th class="text-center">BL1</th>
+          <th class="text-center">BL2</th>
+          <th class="text-center">Nachfrist</th>
+          <th class="text-center d-none d-md-table-cell">Strafgeld</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in zu_spaet %}
+        <tr>
+          <td class="fw-semibold">{{ r.name }}</td>
+          <td class="text-center">
+            {% if r.missing_bl1 %}<span class="badge bg-dark">❌ fehlt</span>
+            {% elif r.late_bl1 and r.nachfrist %}<span class="badge bg-warning text-dark">⏰ per Nachfrist</span>
+            {% elif r.late_bl1 %}<span class="badge bg-danger">❌ zu spät</span>
+            {% else %}<span class="badge bg-success">✅</span>{% endif %}
+          </td>
+          <td class="text-center">
+            {% if r.missing_bl2 %}<span class="badge bg-dark">❌ fehlt</span>
+            {% elif r.late_bl2 and r.nachfrist %}<span class="badge bg-warning text-dark">⏰ per Nachfrist</span>
+            {% elif r.late_bl2 %}<span class="badge bg-danger">❌ zu spät</span>
+            {% else %}<span class="badge bg-success">✅</span>{% endif %}
+          </td>
+          <td class="text-center">
+            {% if r.nachfrist %}
+              <span class="badge {{ 'bg-warning text-dark' if r.nachfrist_active else 'bg-secondary' }}">
+                ⏰ {{ 'Ja' if r.nachfrist_active else 'genutzt' }}
+              </span>
+            {% else %}–{% endif %}
+          </td>
+          <td class="text-center d-none d-md-table-cell">
+            {% if r.nachfrist and r.nachfrist.strafgeld %}
+            <span class="fw-semibold text-danger">{{ r.nachfrist.strafgeld }}</span>
+            {% elif r.late_bl1 or r.late_bl2 %}
+            <span class="text-muted small fst-italic">wird auf der Hauptversammlung festgelegt</span>
+            {% else %}–{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- ══ EWIGE TABELLE ════════════════════════ -->
 {% if ewige_rows %}
 <div class="card shadow-sm mb-4">
   <div class="card-header bg-bundesliga text-white d-flex justify-content-between align-items-center">
@@ -237,41 +360,6 @@
         </tbody>
       </table>
     </div>
-  </div>
-</div>
-{% endif %}
-
-<!-- ══ 5. SPIELTAG-HIGHLIGHTS ═════════════════ -->
-{% if highlights %}
-<div class="card shadow-sm mb-4">
-  <div class="card-header bg-warning text-dark">
-    <i class="bi bi-star-fill me-2"></i>Spieltag-Highlights
-  </div>
-  <div class="card-body p-0">
-    <table class="table table-sm table-hover mb-0">
-      <thead class="table-dark">
-        <tr>
-          <th class="text-center">Spieltag</th><th>🏅 Bester Tipper</th>
-          <th class="text-center">Punkte +</th>
-          <th class="text-center d-none d-sm-table-cell">Platz</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for h in highlights %}
-        <tr>
-          <td class="text-center fw-bold">{{ h.matchday }}.</td>
-          <td>🏅 {{ h.display_name or h.username }}</td>
-          <td class="text-center fw-bold text-success">+{{ h.improvement }}</td>
-          <td class="text-center d-none d-sm-table-cell text-muted small">
-            {% if h.rank_before and h.rank_after %}
-            {{ h.rank_before }}. → <span class="{% if h.rank_after < h.rank_before %}text-success fw-bold{% endif %}">{{ h.rank_after }}.</span>
-            {% if h.rank_after < h.rank_before %}(▲{{ h.rank_before - h.rank_after }}){% endif %}
-            {% else %}–{% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
   </div>
 </div>
 {% endif %}

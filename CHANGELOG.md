@@ -4,7 +4,80 @@ Alle wesentlichen Änderungen am Tippcup-Projekt werden hier dokumentiert.
 
 ---
 
-## [Aktuell] – Mai 2026
+## [Aktuell] – September 2026 – Sicherheits- & Fairness-Audit
+
+Vollständiger Code-Audit durchgeführt (Funktionalität, Tippspiel-Logik,
+Punkteberechnung, Datenintegrität, Sicherheit) – siehe Ergebnisse und
+Fixes unten. Alle Fixes wurden gegen eine Test-DB verifiziert
+(Login-/CSRF-/Autofill-/Impersonation-Tests).
+
+### Kritisch behoben
+- **Scoring-Bug:** Ein User, der für eine bereits gesperrte Liga keinen
+  Tipp abgegeben hat, bekam bisher automatisch die HÖCHSTMÖGLICHE
+  Punktzahl für diese Liga (da 0 Abweichung = perfekter Tipp gerechnet
+  wurde). Neue Funktion `autofill_missing_predictions()`: läuft
+  automatisch vor jeder Punkteberechnung. Wenn die Deadline einer Liga
+  erreicht ist, der User keine aktive Nachfrist hat und der Tipp fehlt
+  (ganz oder teilweise), wird eine ZUFÄLLIGE Tabelle für die fehlenden
+  Plätze erzeugt und in `predictions.is_auto=1` markiert (neue Spalte).
+  In der Tipp-Einzelansicht (`/tips/user/<id>`) wird das per Icon
+  kenntlich gemacht.
+- **Information Disclosure:** 11 Stellen im Code gaben bei
+  unerwarteten Fehlern den vollständigen Python-Traceback direkt als
+  HTML an den Browser aus (Dateipfade, SQL, interne Variablen –
+  auch auf normalen User-Routen, nicht nur Admin). Ersetzt durch
+  `app.logger.exception(...)` (nur noch im Server-Log) + generische
+  Fehlerseite bzw. Flash-Meldung.
+
+### Sicherheit – hohe Priorität
+- **CSRF-Schutz neu eingebaut** (eigene, schlanke Implementierung ohne
+  zusätzliches pip-Paket, da FTP-only-Hosting ohne SSH): Session-Token,
+  geprüft bei jedem POST/PUT/PATCH/DELETE. Alle 60 Formulare im Projekt
+  automatisch mit Hidden-Field versehen; alle `fetch()`-Aufrufe werden
+  über einen globalen Wrapper in `base.html` automatisch mit
+  `X-CSRFToken`-Header versehen. Telegram-Webhook und `/push/renew`
+  sind bewusst ausgenommen (eigene, sessionlose Authentifizierung).
+- **Secret-Key-Fallback entfernt:** Der fest im Code hinterlegte
+  Fallback-Schlüssel wurde entfernt. Fehlt `SECRET_KEY` in der Umgebung
+  (siehe `passenger_wsgi.example.py`), wird bei jedem Prozessstart ein
+  neuer Zufalls-Key erzeugt + eine Warnung geloggt, statt eines im
+  Repository sichtbaren, statischen Schlüssels.
+- **Admin-Impersonation:** Beim Zurückwechseln (`/admin/stop-impersonate`)
+  wird jetzt erneut live geprüft, ob der Ursprungs-Admin-Account noch
+  Admin-Rechte hat und aktiv ist. Falls er zwischenzeitlich degradiert
+  wurde, wird die Session geleert statt fälschlich Admin-Rechte
+  wiederherzustellen.
+- **Security-Header** ergänzt: `X-Frame-Options`, `X-Content-Type-Options`,
+  `Referrer-Policy`, `Strict-Transport-Security` (außerhalb Debug-Modus).
+  `SESSION_COOKIE_SECURE` aktiviert (außerhalb Debug-Modus).
+
+### Sicherheit – mittlere Priorität
+- **Rate-Limiting Profil-Passwort:** Die Passwortänderung im Profil
+  nutzt jetzt denselben IP-basierten Sperrmechanismus wie der Login
+  (5 Fehlversuche → 15 Minuten Sperre).
+- **Tie-Break-Determinismus:** Alle Ranglisten-Sortierungen (12 Stellen)
+  haben jetzt `user_id ASC` als viertes, stabiles Sortierkriterium –
+  bei exaktem Gleichstand ist die Reihenfolge nicht mehr von SQLites
+  interner (nicht garantierter) Sortierstabilität abhängig.
+
+### Aufräumarbeiten
+- **In-App-Chat & Umfragen entfernt:** Die Funktion existiert schon
+  länger nicht mehr im Frontend (keine Route mehr vorhanden), aber die
+  Datenbank-Tabellen (`chat_messages`, `chat_reactions` – dabei sogar
+  **doppelt** und widersprüchlich definiert –, `polls`, `poll_options`,
+  `poll_votes`) und toter Code (Cleanup-Logik beim User-Löschen,
+  Statistik-Kachel im Admin-Backup) wurden vollständig aus dem Code
+  entfernt. Achtung: Falls auf dem Produktivserver noch alte Daten in
+  diesen Tabellen liegen, wurden diese NICHT automatisch gelöscht
+  (kein `DROP TABLE` im Code) – bei Bedarf manuell/gezielt aufräumen.
+
+### Repository
+- Projekt erstmals als Git-Repository initialisiert und nach GitHub
+  übertragen (siehe README.md / .gitignore).
+
+---
+
+## [Mai 2026]
 
 ### Bestenliste & Rückblick
 - Größte Einzel-Abweichung pro Liga (BL1/BL2) mit Vereinsname in Bestenliste und Saisonrückblick

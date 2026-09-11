@@ -9,7 +9,7 @@
     {% if season.tips_locked %}<span class="badge bg-danger ms-1">Tipps gesperrt</span>{% else %}<span class="badge bg-primary ms-1">Tipps offen</span>{% endif %}
   </div>
   <div class="ms-auto">
-    <form method="POST" action="{{ url_for('admin_season') }}" class="d-inline">
+    <form method="POST" action="{{ url_for('admin_season') }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="update_standings">
       <button class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-clockwise me-1"></i>Beide Tabellen aktualisieren</button>
     </form>

@@ -1,5 +1,5 @@
 // Service Worker – Tippcup v5
-const CACHE = 'tippcup-v5';
+const CACHE = 'tippcup-v7';
 
 const STATIC_ASSETS = [
   '/static/css/style.css',

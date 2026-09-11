@@ -1,0 +1,26 @@
+# Datenbank (enthält echte Nutzerdaten – nie committen)
+*.db
+*.sqlite
+*.sqlite3
+
+# Echte Server-Konfiguration mit Zugangsdaten (nur .example.py ist im Repo)
+passenger_wsgi.py
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Lokale Backups/Exports, die die App selbst erzeugt
+*.zip
+backups/
+
+# Editor-/OS-Dateien
+.DS_Store
+.vscode/
+.idea/
+
+# Lokale Umgebungsvariablen
+.env

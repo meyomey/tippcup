@@ -31,7 +31,7 @@
     <i class="bi bi-key me-2"></i>football-data.org API-Key
   </div>
   <div class="card-body">
-    <form method="POST">
+    <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="save_key">
       <div class="mb-3">
         <label class="form-label fw-semibold">API-Key
@@ -152,7 +152,7 @@
               Sinnvoll nach einem Server-Umzug oder bei Problemen.
             </p>
             <form method="POST"
-                  onsubmit="return confirm('Wirklich alle Push-Subscriptions löschen?\n\nAlle Nutzer müssen Push danach neu aktivieren.')">
+                  onsubmit="return confirm('Wirklich alle Push-Subscriptions löschen?\n\nAlle Nutzer müssen Push danach neu aktivieren.')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="action" value="clear_push">
               <button type="submit" class="btn btn-outline-warning btn-sm" {% if push_total == 0 %}disabled{% endif %}>
                 <i class="bi bi-trash me-1"></i>{{ push_total }} Subscription{% if push_total != 1 %}s{% endif %} löschen
@@ -172,7 +172,7 @@
               Aktuell: <strong>{{ vapid_ver }}</strong>
             </p>
             <form method="POST"
-                  onsubmit="return confirm('VAPID-Version rotieren?\n\nAlle Push-Subscriptions werden gelöscht.\nNutzer müssen Push auf jedem Gerät neu aktivieren.')">
+                  onsubmit="return confirm('VAPID-Version rotieren?\n\nAlle Push-Subscriptions werden gelöscht.\nNutzer müssen Push auf jedem Gerät neu aktivieren.')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="action" value="rotate_vapid">
               <button type="submit" class="btn btn-outline-danger btn-sm">
                 <i class="bi bi-arrow-repeat me-1"></i>Key-Version erhöhen & Subscriptions löschen

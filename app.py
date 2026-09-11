@@ -2,8 +2,9 @@
 """
 Tippcup Bundesliga – 1. & 2. Bundesliga gleichzeitig
 """
-from flask import (Flask, render_template, request, redirect, url_for,
-                   session, flash, g, abort, jsonify, send_from_directory)
+from flask import (Flask, render_template, render_template_string, request, redirect, url_for,
+                   session, flash, g, abort, jsonify, send_from_directory,
+                   send_file, make_response)
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from datetime import datetime, timedelta
@@ -49,6 +50,9 @@ import math
 import shutil
 import tempfile
 import smtplib
+import random
+import secrets
+import hmac
 from urllib.parse import urlparse, parse_qs
 from email.mime.multipart import MIMEMultipart
 from email.mime.text      import MIMEText
@@ -63,12 +67,42 @@ app = Flask(__name__)
 # Jinja-Filter: UTC-DB-Timestamps → lokale Anzeigezeit
 app.jinja_env.filters['localtime'] = lambda ts, fmt='%H:%M': _utc_to_local_str(ts, fmt)
 app.jinja_env.filters['localdt']   = lambda ts: _utc_to_local_str(ts, '%d.%m.%Y %H:%M')
-app.secret_key = os.environ.get('SECRET_KEY', 'd7ad56cc937981959e3d4282216bd35bf6431de079aa17551d3fcb2ed088fb5d')
+
+_DEBUG_MODE = os.environ.get('FLASK_DEBUG', '0') == '1'
+
+# SECRET_KEY MUSS über die Umgebung (passenger_wsgi.py) gesetzt werden – siehe
+# passenger_wsgi.example.py. Kein fest im Code hinterlegter Fallback mehr:
+# Ein im Repository sichtbarer Schlüssel würde bei fehlender Konfiguration
+# Session-Fälschung ermöglichen. Fehlt SECRET_KEY, wird stattdessen bei
+# jedem Prozessstart ein neuer Zufalls-Key erzeugt (Sessions/Logins bleiben
+# dann nur bis zum nächsten Neustart gültig) – für den lokalen Testbetrieb
+# ausreichend, für den Produktivbetrieb aber unbedingt SECRET_KEY setzen!
+_secret_key = os.environ.get('SECRET_KEY')
+if not _secret_key:
+    _secret_key = secrets.token_hex(32)
+    app.logger.warning(
+        'SECRET_KEY ist NICHT gesetzt! Es wird ein temporärer Zufalls-Key verwendet '
+        '(Sessions werden bei jedem Neustart ungültig). '
+        'In passenger_wsgi.py setzen – siehe passenger_wsgi.example.py.'
+    )
+app.secret_key = _secret_key
+
 # Session-Timeout: 8 Stunden Inaktivität → automatisch abmelden
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
 app.config['SESSION_COOKIE_HTTPONLY']    = True   # XSS-Schutz
+app.config['SESSION_COOKIE_SECURE']      = not _DEBUG_MODE  # Cookie nur über HTTPS (außer im lokalen Debug-Betrieb)
 app.config['SESSION_COOKIE_SAMESITE']    = 'Lax'  # CSRF-Grundschutz
 app.config['MAX_CONTENT_LENGTH']         = 100 * 1024 * 1024  # max. 100 MB Upload
+
+@app.after_request
+def set_security_headers(resp):
+    """Grundlegende Security-Header gegen Clickjacking, MIME-Sniffing etc."""
+    resp.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
+    resp.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    resp.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    if not _DEBUG_MODE:
+        resp.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    return resp
 DATABASE = os.environ.get('DB_PATH', 'tippspiel.db')
 
 LEAGUES = {'bl1': '1. Bundesliga', 'bl2': '2. Bundesliga'}
@@ -92,15 +126,6 @@ CREATE TABLE IF NOT EXISTS users (
     last_login TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE TABLE IF NOT EXISTS chat_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    message TEXT NOT NULL,
-    reply_to_id INTEGER DEFAULT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (reply_to_id) REFERENCES chat_messages(id) ON DELETE SET NULL
-);
 CREATE TABLE IF NOT EXISTS seasons (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     year INTEGER NOT NULL,
@@ -108,6 +133,8 @@ CREATE TABLE IF NOT EXISTS seasons (
     is_active INTEGER DEFAULT 1,
     season_started INTEGER DEFAULT 0,
     tips_locked INTEGER DEFAULT 0,
+    locked_bl1  INTEGER DEFAULT 0,
+    locked_bl2  INTEGER DEFAULT 0,
     deadline_bl1 TIMESTAMP,
     deadline_bl2 TIMESTAMP,
     last_updated TIMESTAMP,
@@ -205,40 +232,6 @@ CREATE TABLE IF NOT EXISTS login_attempts (
     username   TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE TABLE IF NOT EXISTS polls (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    question   TEXT NOT NULL,
-    created_by INTEGER NOT NULL,
-    is_active  INTEGER DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (created_by) REFERENCES users(id)
-);
-CREATE TABLE IF NOT EXISTS poll_options (
-    id       INTEGER PRIMARY KEY AUTOINCREMENT,
-    poll_id  INTEGER NOT NULL,
-    option   TEXT NOT NULL,
-    FOREIGN KEY (poll_id) REFERENCES polls(id) ON DELETE CASCADE
-);
-CREATE TABLE IF NOT EXISTS poll_votes (
-    id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    poll_id   INTEGER NOT NULL,
-    option_id INTEGER NOT NULL,
-    user_id   INTEGER NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(poll_id, user_id),
-    FOREIGN KEY (poll_id)  REFERENCES polls(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id)  REFERENCES users(id)
-);
-CREATE TABLE IF NOT EXISTS chat_reactions (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    message_id INTEGER NOT NULL,
-    user_id    INTEGER NOT NULL,
-    emoji      TEXT NOT NULL CHECK(emoji IN ('👍','👎')),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(message_id, user_id),
-    FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id)    REFERENCES users(id)
-);
 CREATE TABLE IF NOT EXISTS media_folders (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     name        TEXT NOT NULL,
@@ -277,16 +270,6 @@ CREATE TABLE IF NOT EXISTS email_reminders (
     UNIQUE(user_id, season_id),
     FOREIGN KEY (user_id)   REFERENCES users(id),
     FOREIGN KEY (season_id) REFERENCES seasons(id)
-);
-CREATE TABLE IF NOT EXISTS chat_reactions (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    message_id INTEGER NOT NULL,
-    user_id    INTEGER NOT NULL,
-    emoji      TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(message_id, user_id, emoji),
-    FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id)    REFERENCES users(id)
 );
 CREATE TABLE IF NOT EXISTS matchday_highlights (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -340,6 +323,20 @@ CREATE TABLE IF NOT EXISTS legacy_name_map (
     user_id     INTEGER,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+CREATE TABLE IF NOT EXISTS nachfrist (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL UNIQUE,
+    season_id    INTEGER NOT NULL,
+    granted_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at   TIMESTAMP,
+    granted_by   INTEGER,
+    strafgeld    TEXT DEFAULT '',
+    notiz        TEXT DEFAULT '',
+    revoked_at   TIMESTAMP,
+    FOREIGN KEY (user_id)    REFERENCES users(id),
+    FOREIGN KEY (season_id)  REFERENCES seasons(id),
+    FOREIGN KEY (granted_by) REFERENCES users(id)
+);
 CREATE TABLE IF NOT EXISTS legacy_angsthasen (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     season      TEXT NOT NULL,
@@ -392,11 +389,20 @@ def init_db():
                 db.execute(f'ALTER TABLE scores ADD COLUMN {col} {typ}')
                 db.commit()
             except: pass
-        for col, typ in [('deadline_bl1', 'TIMESTAMP'), ('deadline_bl2', 'TIMESTAMP')]:
+        for col, typ in [('deadline_bl1', 'TIMESTAMP'), ('deadline_bl2', 'TIMESTAMP'),
+                         ('locked_bl1', 'INTEGER DEFAULT 0'), ('locked_bl2', 'INTEGER DEFAULT 0')]:
             try:
                 db.execute(f'ALTER TABLE seasons ADD COLUMN {col} {typ}')
                 db.commit()
             except: pass
+        try:
+            db.execute('ALTER TABLE predictions ADD COLUMN is_auto INTEGER DEFAULT 0')
+            db.commit()
+        except: pass
+        try:
+            db.execute('ALTER TABLE nachfrist ADD COLUMN revoked_at TIMESTAMP')
+            db.commit()
+        except: pass
         try:
             db.execute('ALTER TABLE users ADD COLUMN email TEXT')
             db.commit()
@@ -437,25 +443,15 @@ def init_db():
             FOREIGN KEY (user_id)   REFERENCES users(id)
         )""")
         try:
-            db.execute('ALTER TABLE pcloud_config ADD COLUMN share_photos TEXT DEFAULT ""')
-            db.execute('ALTER TABLE pcloud_config ADD COLUMN share_docs TEXT DEFAULT ""')
             db.commit()
         except: pass
-        # Migration: neue Tabellen für Polls und Reaktionen
+        # Migration: zusätzliche Tabellen (Push, Badges)
         for stmt in [
-            'CREATE TABLE IF NOT EXISTS polls (id INTEGER PRIMARY KEY AUTOINCREMENT, question TEXT NOT NULL, created_by INTEGER NOT NULL, is_active INTEGER DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)',
-            'CREATE TABLE IF NOT EXISTS poll_options (id INTEGER PRIMARY KEY AUTOINCREMENT, poll_id INTEGER NOT NULL, option TEXT NOT NULL)',
-            'CREATE TABLE IF NOT EXISTS poll_votes (id INTEGER PRIMARY KEY AUTOINCREMENT, poll_id INTEGER NOT NULL, option_id INTEGER NOT NULL, user_id INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(poll_id, user_id))',
-            'CREATE TABLE IF NOT EXISTS chat_reactions (id INTEGER PRIMARY KEY AUTOINCREMENT, message_id INTEGER NOT NULL, user_id INTEGER NOT NULL, emoji TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(message_id, user_id))',
             'CREATE TABLE IF NOT EXISTS push_subscriptions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, endpoint TEXT NOT NULL UNIQUE, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)',
             'CREATE TABLE IF NOT EXISTS user_badges (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, season_id INTEGER NOT NULL, badge_type TEXT NOT NULL, UNIQUE(user_id, season_id, badge_type))',
         ]:
             try: db.execute(stmt); db.commit()
             except: pass
-        try:
-            db.execute('ALTER TABLE chat_messages ADD COLUMN reply_to_id INTEGER DEFAULT NULL')
-            db.commit()
-        except: pass
         # Alte Push-Subscriptions bei Key-Wechsel löschen
         try:
             kv = db.execute("SELECT data FROM api_cache WHERE key='vapid_key_version'").fetchone()
@@ -479,8 +475,6 @@ def init_db():
             'CREATE INDEX IF NOT EXISTS idx_standings_team      ON standings(team_id)',
             'CREATE INDEX IF NOT EXISTS idx_users_active        ON users(is_active)',
             'CREATE INDEX IF NOT EXISTS idx_scores_season       ON scores(season_id)',
-            'CREATE INDEX IF NOT EXISTS idx_poll_votes_poll     ON poll_votes(poll_id)',
-            'CREATE INDEX IF NOT EXISTS idx_reactions_msg       ON chat_reactions(message_id)',
             'CREATE INDEX IF NOT EXISTS idx_snapshots_season    ON ranking_snapshots(season_id)',
             'CREATE INDEX IF NOT EXISTS idx_teams_season        ON teams(season_id)',
             'CREATE INDEX IF NOT EXISTS idx_highlights_season   ON matchday_highlights(season_id)',
@@ -517,6 +511,12 @@ def init_db():
                 UNIQUE(season, tipper))''',
             '''CREATE TABLE IF NOT EXISTS legacy_name_map (
                 csv_name TEXT PRIMARY KEY, user_id INTEGER)''',
+            '''CREATE TABLE IF NOT EXISTS nachfrist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL UNIQUE, season_id INTEGER NOT NULL,
+                granted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP, granted_by INTEGER,
+                strafgeld TEXT DEFAULT '', notiz TEXT DEFAULT '')''',
             '''CREATE TABLE IF NOT EXISTS legacy_angsthasen (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 season TEXT NOT NULL, rang INTEGER NOT NULL, name TEXT NOT NULL,
@@ -584,7 +584,11 @@ def admin_required(f):
         return f(*a, **kw)
     return d
 
-# ── Helpers ──────────────────────────────────
+
+# ════════════════════════════════════════════════════════════
+# HILFSFUNKTIONEN & SCORING
+# ════════════════════════════════════════════════════════════
+
 
 @app.context_processor
 def inject_db_config():
@@ -597,6 +601,43 @@ def inject_db_config():
             app.logger.debug(f"Ignorierter Fehler: {e}")
             return default
     return dict(db_config=db_config)
+
+
+# ════════════════════════════════════════════════════════════
+# CSRF-SCHUTZ
+# ════════════════════════════════════════════════════════════
+# Eigene, schlanke Implementierung (kein zusätzliches pip-Paket nötig –
+# relevant, da das Hosting nur FTP-Zugriff ohne SSH erlaubt).
+# Ein Token pro Session, geprüft bei jedem state-changing Request
+# (POST/PUT/PATCH/DELETE) gegen das Form-Feld 'csrf_token' oder den
+# Header 'X-CSRFToken' (für AJAX/fetch – siehe base.html).
+
+# Endpunkte, die absichtlich OHNE Session-Cookie aufgerufen werden und
+# daher kein CSRF-Ziel sind (eigene Authentifizierung über URL-Token
+# bzw. den alten Push-Endpoint):
+CSRF_EXEMPT_ENDPOINTS = {'telegram_webhook', 'push_renew'}
+
+def get_csrf_token():
+    if 'csrf_token' not in session:
+        session['csrf_token'] = secrets.token_hex(32)
+    return session['csrf_token']
+
+@app.context_processor
+def inject_csrf_token():
+    return dict(csrf_token=get_csrf_token)
+
+@app.before_request
+def csrf_protect():
+    if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+        if request.endpoint in CSRF_EXEMPT_ENDPOINTS:
+            return
+        token_session = session.get('csrf_token')
+        token_sent    = request.form.get('csrf_token') or request.headers.get('X-CSRFToken')
+        if not token_session or not token_sent or not hmac.compare_digest(token_session, token_sent):
+            app.logger.warning(
+                f'CSRF-Token ungültig/fehlend – Endpoint={request.endpoint}, IP={get_client_ip()}'
+            )
+            abort(403)
 
 
 def get_config(key, default=''):
@@ -761,6 +802,79 @@ def rebuild_snapshots_from_history(season_id):
     return ok_count, skip_count, errors
 
 
+def autofill_missing_predictions(season_id):
+    """
+    Erstellt automatisch eine ZUFÄLLIGE Tabelle für Nutzer, die für eine
+    bereits gesperrte Liga keinen (oder nur einen unvollständigen) Tipp
+    abgegeben haben – und die auch KEINE aktive Nachfrist mehr haben.
+
+    Ablauf pro Liga (bl1/bl2):
+      1. Liga noch nicht gesperrt (Deadline nicht erreicht)  → nichts tun,
+         der User kann noch normal tippen.
+      2. Liga gesperrt, User hat aktive Nachfrist             → nichts tun,
+         er bekommt seine Nachfrist-Chance.
+      3. Liga gesperrt, KEINE aktive Nachfrist, Tipp fehlt
+         (ganz oder teilweise)                                → fehlende
+         Plätze zufällig auffüllen und als is_auto=1 markieren.
+
+    Wird bei jeder Score-Neuberechnung aufgerufen (siehe
+    calculate_scores_for_season), läuft also automatisch mit jedem
+    Tabellen-Update bzw. jeder manuellen Neuberechnung mit.
+    """
+    db = get_db()
+    season = db.execute('SELECT * FROM seasons WHERE id=?', (season_id,)).fetchone()
+    if not season:
+        return
+    season = dict(season)
+
+    active_users = db.execute('SELECT id FROM users WHERE is_active=1').fetchall()
+    changed = False
+
+    for lg in ('bl1', 'bl2'):
+        if not season.get(f'locked_{lg}'):
+            continue  # Deadline dieser Liga noch nicht erreicht
+
+        teams = get_season_teams(season_id, lg)
+        if not teams:
+            continue
+        all_ranks = set(range(1, len(teams) + 1))
+
+        for u in active_users:
+            uid = u['id']
+            if has_nachfrist(uid, season_id):
+                continue  # bekommt noch seine Chance über die Nachfrist
+
+            existing = {p['team_id']: p['predicted_rank'] for p in db.execute(
+                'SELECT team_id, predicted_rank FROM predictions WHERE user_id=? AND season_id=? '
+                'AND team_id IN (%s)' % ','.join('?' * len(teams)),
+                [uid, season_id] + [t['id'] for t in teams]
+            ).fetchall()}
+
+            if len(existing) == len(teams):
+                continue  # bereits vollständig getippt
+
+            missing_teams = [t for t in teams if t['id'] not in existing]
+            missing_ranks = list(all_ranks - set(existing.values()))
+            random.shuffle(missing_ranks)
+
+            for team, rank in zip(missing_teams, missing_ranks):
+                db.execute(
+                    """INSERT INTO predictions (user_id,season_id,team_id,predicted_rank,is_auto,updated_at)
+                       VALUES (?,?,?,?,1,CURRENT_TIMESTAMP)
+                       ON CONFLICT(user_id,season_id,team_id) DO UPDATE SET
+                       predicted_rank=excluded.predicted_rank, is_auto=1, updated_at=CURRENT_TIMESTAMP""",
+                    (uid, season_id, team['id'], rank)
+                )
+            changed = True
+            app.logger.info(
+                f'autofill_missing_predictions: Zufallstipp für user_id={uid}, '
+                f'Liga={lg}, Saison={season_id} ({len(missing_teams)} Plätze ergänzt)'
+            )
+
+    if changed:
+        db.commit()
+
+
 def calculate_scores_for_season(season_id):
     """
     Berechnet Punkte und Kennwerte nach dem mathematischen Dokument:
@@ -771,6 +885,8 @@ def calculate_scores_for_season(season_id):
             s_ges = Σ s_l
     Score pro Liga: a_max_l - a_l  mit a_max_l = n_l² / 2
     """
+    autofill_missing_predictions(season_id)
+
     db = get_db()
 
     # Aktuelle Tabelle: team_id → {current_rank, league}
@@ -934,8 +1050,7 @@ def calculate_scores_for_season(season_id):
                               sc.std_deviation, sc.volltreffer
                        FROM scores sc JOIN users u ON sc.user_id=u.id
                        WHERE sc.season_id=? AND u.is_active=1
-                       ORDER BY sc.score DESC, sc.std_deviation ASC,
-                                sc.volltreffer DESC LIMIT 3''', (season_id,)
+                       ORDER BY sc.score DESC, sc.std_deviation ASC, sc.volltreffer DESC, sc.user_id ASC LIMIT 3''', (season_id,)
                 ).fetchall()
                 if top3:
                     ok, err = tg.notify_standings_updated(db_tg, season_row['name'], [dict(r) for r in top3])
@@ -972,7 +1087,7 @@ def _push_leaderboard_update(season_id):
     current = {r['user_id']: (i+1, r['score']) for i,r in enumerate(db.execute(
         '''SELECT sc.user_id, sc.score FROM scores sc JOIN users u ON sc.user_id=u.id
            WHERE sc.season_id=? AND u.is_active=1
-           ORDER BY sc.score DESC, sc.std_deviation ASC, sc.volltreffer DESC''',
+           ORDER BY sc.score DESC, sc.std_deviation ASC, sc.volltreffer DESC, sc.user_id ASC''',
         (season_id,)
     ).fetchall())}
     prev = {r['user_id']: r['rank'] for r in db.execute(
@@ -1006,7 +1121,7 @@ def _save_ranking_snapshot(season_id):
         """SELECT sc.user_id, sc.score FROM scores sc
            JOIN users u ON sc.user_id=u.id
            WHERE sc.season_id=? AND u.is_active=1
-           ORDER BY sc.score DESC, sc.std_deviation ASC, sc.volltreffer DESC""",
+           ORDER BY sc.score DESC, sc.std_deviation ASC, sc.volltreffer DESC, sc.user_id ASC""",
         (season_id,)
     ).fetchall()
     if not all_scores:
@@ -1275,32 +1390,44 @@ def check_and_autolock(season):
     """
     if not season or season['tips_locked']:
         return season
+    # sqlite3.Row hat kein .get() – in dict umwandeln
+    season = dict(season)
     db  = get_db()
     now = local_now()
-    # Deadlines aus DB lesen
     dl_bl1 = season['deadline_bl1']
     dl_bl2 = season['deadline_bl2']
-    # Falls noch keine Deadlines vorhanden: von API laden
     if not dl_bl1 and not dl_bl2:
         fetched = fetch_deadlines(season)
-        season  = get_active_season()  # neu laden
+        season  = get_active_season()
         dl_bl1  = season['deadline_bl1']
         dl_bl2  = season['deadline_bl2']
-    # Früheste Deadline bestimmen
-    deadlines = []
-    for dl in (dl_bl1, dl_bl2):
-        if dl:
-            try:
-                deadlines.append(datetime.fromisoformat(str(dl)))
-            except Exception as e:
-                app.logger.debug(f"Ignorierter Fehler: {e}")
-    if not deadlines:
-        return season
-    earliest = min(deadlines)
-    if now >= earliest:
-        db.execute('UPDATE seasons SET tips_locked=1, season_started=1 WHERE id=?', (season['id'],))
+
+    changed = False
+    # BL2 sperren sobald ihre Deadline erreicht ist
+    if dl_bl2 and not season.get('locked_bl2', 0):
+        try:
+            if now >= datetime.fromisoformat(str(dl_bl2)):
+                db.execute('UPDATE seasons SET locked_bl2=1 WHERE id=?', (season['id'],))
+                changed = True
+        except Exception as e:
+            app.logger.debug(f"Ignorierter Fehler: {e}")
+    # BL1 sperren sobald ihre Deadline erreicht ist
+    if dl_bl1 and not season.get('locked_bl1', 0):
+        try:
+            if now >= datetime.fromisoformat(str(dl_bl1)):
+                db.execute('UPDATE seasons SET locked_bl1=1 WHERE id=?', (season['id'],))
+                changed = True
+        except Exception as e:
+            app.logger.debug(f"Ignorierter Fehler: {e}")
+    # Beide Ligen gesperrt → Saison vollständig sperren und starten
+    if changed:
+        season_r = dict(get_active_season()) if changed else season
+        if season_r and season_r.get('locked_bl1') and season_r.get('locked_bl2'):
+            db.execute('UPDATE seasons SET tips_locked=1, season_started=1 WHERE id=?', (season['id'],))
+        elif changed:
+            db.execute('UPDATE seasons SET season_started=1 WHERE id=?', (season['id'],))
         db.commit()
-        return get_active_season()
+        return dict(get_active_season())
     return season
 
 def maybe_auto_update(season):
@@ -1497,6 +1624,23 @@ def calculate_angsthasen(season):
     results.sort(key=lambda x: x['w_total'])
     return results, True
 
+def has_nachfrist(user_id, season_id):
+    """Prüft ob ein User eine aktive (nicht entzogene) Nachfrist hat."""
+    from datetime import datetime as _dt
+    row = get_db().execute(
+        'SELECT expires_at FROM nachfrist WHERE user_id=? AND season_id=? AND revoked_at IS NULL',
+        (user_id, season_id)
+    ).fetchone()
+    if not row:
+        return False
+    if not row['expires_at']:
+        return True   # keine Ablaufzeit = unbegrenzt
+    try:
+        return _dt.now() <= _dt.fromisoformat(str(row['expires_at']))
+    except Exception:
+        return False
+
+# Rückwärtskompatibilität
 def get_wildcard_ids(scores):
     """Gibt die user_ids ALLER Spieler mit der höchsten max_deviation zurück (Set)."""
     valid = [s for s in scores if s['max_deviation']]
@@ -1505,7 +1649,6 @@ def get_wildcard_ids(scores):
     max_dev = max(s['max_deviation'] for s in valid)
     return {s['id'] for s in valid if s['max_deviation'] == max_dev}
 
-# Rückwärtskompatibilität
 def get_wildcard_id(scores):
     ids = get_wildcard_ids(scores)
     return next(iter(ids)) if ids else None
@@ -1573,7 +1716,7 @@ def calculate_and_assign_badges(season_id):
         '''SELECT sc.user_id, sc.score, sc.std_deviation, sc.volltreffer, sc.max_deviation
            FROM scores sc JOIN users u ON sc.user_id=u.id
            WHERE sc.season_id=? AND u.is_active=1
-           ORDER BY sc.score DESC, sc.std_deviation ASC, sc.volltreffer DESC''',
+           ORDER BY sc.score DESC, sc.std_deviation ASC, sc.volltreffer DESC, sc.user_id ASC''',
         (season_id,)
     ).fetchall()
     if not scores:
@@ -1688,6 +1831,10 @@ def send_email(to_list, subject, body_html, body_text=None):
             errors.append(f'{addr}: {e}')
     return success, errors
 
+
+# ════════════════════════════════════════════════════════════
+# AUTHENTIFIZIERUNG & SICHERHEIT
+# ════════════════════════════════════════════════════════════
 # ── Brute-Force-Schutz ───────────────────────
 MAX_ATTEMPTS  = 5    # Fehlversuche bis Sperre
 LOCKOUT_MIN   = 15   # Sperrzeit in Minuten
@@ -1746,7 +1893,11 @@ def get_attempt_count(ip: str) -> int:
         (ip, _utc_cutoff(minutes=LOCKOUT_MIN))
     ).fetchone()['c']
 
-# ── Routes ────────────────────────────────────
+
+# ════════════════════════════════════════════════════════════
+# ROUTEN – BENUTZER
+# ════════════════════════════════════════════════════════════
+
 @app.route('/login', methods=['GET','POST'])
 def login():
     if 'user_id' in session: return redirect(url_for('dashboard'))
@@ -1769,10 +1920,16 @@ def login():
         if user and check_password_hash(user['password_hash'], password):
             # Erfolg: Fehlversuche löschen, Session setzen
             clear_attempts(ip)
-            session.permanent = True   # Session-Timeout aktiv (8h)
+            remember = request.form.get('remember_me') == '1'
+            session.permanent = True
+            if remember:
+                app.permanent_session_lifetime = timedelta(days=30)
+            else:
+                app.permanent_session_lifetime = timedelta(hours=8)
             session.update({'user_id':user['id'], 'username':user['username'],
                             'display_name':user['display_name'] or user['username'],
-                            'is_admin':bool(user['is_admin'])})
+                            'is_admin':bool(user['is_admin']),
+                            'remember_me': remember})
             get_db().execute('UPDATE users SET last_login=? WHERE id=?', (local_now().isoformat(), user['id']))
             get_db().commit()
             flash(f'Willkommen, {session["display_name"]}! ⚽', 'success')
@@ -1803,6 +1960,7 @@ def logout():
 @app.route('/')
 @login_required
 def dashboard():
+  try:
     season = maybe_auto_update(get_active_season())
     pred_status, user_score, user_rank = None, None, None
     standings = {'bl1':[], 'bl2':[]}
@@ -1818,7 +1976,7 @@ def dashboard():
                 """SELECT user_id, score FROM scores
                    JOIN users u ON scores.user_id=u.id
                    WHERE season_id=? AND u.is_active=1
-                   ORDER BY score DESC, std_deviation ASC, volltreffer DESC""",
+                   ORDER BY score DESC, std_deviation ASC, volltreffer DESC, user_id ASC""",
                 (season['id'],)
             ).fetchall()
             for i, s in enumerate(all_scores, 1):
@@ -1844,15 +2002,31 @@ def dashboard():
         user_rank=user_rank, angst_rank=angst_rank, angst_total=angst_total,
         is_top_angsthase=is_top_angsthase,
         leagues=LEAGUES, max_score=MAX_SCORE)
+  except Exception:
+    app.logger.exception('Dashboard Fehler')
+    return render_template('errors/500.html'), 500
 
 @app.route('/predict', methods=['GET','POST'])
 @login_required
 def predict():
+  try:
     season = get_active_season()
     if not season: flash('Keine aktive Saison.','warning'); return redirect(url_for('dashboard'))
     # Auto-lock prüfen bevor wir die Seite anzeigen
     season = check_and_autolock(season)
-    if season['tips_locked']: flash('Tippabgabe gesperrt – das erste Spiel hat begonnen.','warning'); return redirect(url_for('dashboard'))
+    uid = session['user_id']
+    nf  = has_nachfrist(uid, season['id'])
+    if season['tips_locked'] and not nf:
+        flash('Tippabgabe gesperrt – alle Ligen haben begonnen.', 'warning')
+        return redirect(url_for('dashboard'))
+    # Welche Ligen sind gesperrt? Bei Nachfrist alles offen
+    locked_leagues = set()
+    try:
+        if not nf:
+            if season.get('locked_bl1'): locked_leagues.add('bl1')
+            if season.get('locked_bl2'): locked_leagues.add('bl2')
+    except Exception:
+        pass
     db    = get_db()
     # Deadlines aufbereiten
     deadlines = {}
@@ -1885,6 +2059,8 @@ def predict():
         ranks, errors = {}, []
         for lg, lg_teams in teams.items():
             if not lg_teams: continue
+            if lg in locked_leagues:
+                continue   # gesperrte Liga überspringen
             used = set()
             for team in lg_teams:
                 val = request.form.get(f'rank_{team["id"]}','')
@@ -1896,7 +2072,7 @@ def predict():
                 else: used.add(rank); ranks[team['id']] = rank
         if errors:
             for e in errors: flash(e,'danger')
-        elif len(ranks) != sum(len(t) for t in teams.values()):
+        elif len(ranks) != sum(len(t) for lg, t in teams.items() if lg not in locked_leagues):
             flash('Bitte alle Teams beider Ligen platzieren.','danger')
         else:
             for tid, rank in ranks.items():
@@ -1925,7 +2101,11 @@ def predict():
         group_avg = {r['team_id']: round(r['avg_rank'], 1) for r in others}
     return render_template('predict.html', season=season, teams=teams,
         existing=existing, leagues=LEAGUES, deadlines=deadlines,
-        group_avg=group_avg, now_utc=local_now())
+        group_avg=group_avg, now_utc=local_now(),
+        locked_leagues=locked_leagues)
+  except Exception:
+    app.logger.exception('Predict Fehler')
+    return render_template('errors/500.html'), 500
 
 @app.route('/leaderboard/scores')
 @login_required
@@ -1940,7 +2120,7 @@ def leaderboard_scores_api():
                   sc.total_deviation, sc.volltreffer, sc.updated_at
            FROM scores sc JOIN users u ON sc.user_id=u.id
            WHERE sc.season_id=? AND u.is_active=1
-           ORDER BY sc.score DESC, sc.std_deviation ASC, sc.volltreffer DESC""",
+           ORDER BY sc.score DESC, sc.std_deviation ASC, sc.volltreffer DESC, sc.user_id ASC""",
         (season['id'],)
     ).fetchall()
     return jsonify({
@@ -1961,6 +2141,7 @@ def leaderboard_scores_api():
 @app.route('/leaderboard')
 @login_required
 def leaderboard():
+  try:
     season = get_active_season()
     scores, pending = [], []
     if season:
@@ -1971,7 +2152,7 @@ def leaderboard():
                       sc.std_deviation,sc.max_deviation,sc.volltreffer,
                       sc.updated_at
                FROM scores sc JOIN users u ON sc.user_id=u.id
-               WHERE sc.season_id=? AND u.is_active=1 ORDER BY sc.score DESC, sc.std_deviation ASC, sc.volltreffer DESC""",
+               WHERE sc.season_id=? AND u.is_active=1 ORDER BY sc.score DESC, sc.std_deviation ASC, sc.volltreffer DESC, sc.user_id ASC""",
             (season['id'],)
         ).fetchall()
         scored_ids = {s['id'] for s in scores}
@@ -2035,22 +2216,37 @@ def leaderboard():
         user_badges_map=user_badges_map, badge_defs=BADGE_DEFS,
         max_dev_map=max_dev_map,
         now_local=local_now_str())
+  except Exception:
+    app.logger.exception('Leaderboard Fehler')
+    return render_template('errors/500.html'), 500
 
 @app.route('/tips')
 @login_required
 def tips():
+  try:
     season = get_active_season()
-    if not season or not season['season_started']:
-        flash('Tipps sind erst nach Beginn des ersten Spieltags sichtbar.','info')
+    is_admin = session.get('is_admin', False)
+    if not season:
+        flash('Keine aktive Saison.', 'info')
         return redirect(url_for('dashboard'))
+    season_d = dict(season)
+    locked_bl1 = bool(season_d.get('tips_locked') or season_d.get('locked_bl1', 0))
+    locked_bl2 = bool(season_d.get('tips_locked') or season_d.get('locked_bl2', 0))
+    # Mindestens eine Liga muss gesperrt sein – sonst nichts sichtbar (außer Admin)
+    if not is_admin and not locked_bl1 and not locked_bl2:
+        flash('Die Tipps sind erst sichtbar wenn die Tippabgabe für die jeweilige Liga abgelaufen ist.', 'info')
+        return redirect(url_for('dashboard'))
+    # Sichtbare Ligen: nur gesperrte (oder alle für Admin)
+    visible_leagues = {}
+    for lg in ('bl1', 'bl2'):
+        if is_admin or (lg == 'bl1' and locked_bl1) or (lg == 'bl2' and locked_bl2):
+            visible_leagues[lg] = LEAGUES[lg]
     standings_dict = {s['team_id']: s['current_rank']
-                      for lg in ('bl1','bl2') for s in get_standings(season['id'], lg)}
-    # Teams nach aktuellem Tabellenplatz sortieren (fallback: alphabetisch)
+                      for lg in visible_leagues for s in get_standings(season['id'], lg)}
     teams = {}
-    for lg in ('bl1','bl2'):
+    for lg in visible_leagues:
         lg_teams = get_season_teams(season['id'], lg)
-        teams[lg] = sorted(lg_teams,
-            key=lambda t: standings_dict.get(t['id'], 99))
+        teams[lg] = sorted(lg_teams, key=lambda t: standings_dict.get(t['id'], 99))
     users = get_db().execute(
         """SELECT DISTINCT u.id,u.username,u.display_name,
                   (SELECT score FROM scores WHERE user_id=u.id AND season_id=:sid) as score
@@ -2066,17 +2262,31 @@ def tips():
         (season['id'],)
     ).fetchall()
     return render_template('tips.html', season=season, teams=teams,
-        users_preds=users_preds, standings_dict=standings_dict, leagues=LEAGUES,
+        users_preds=users_preds, standings_dict=standings_dict,
+        leagues=visible_leagues, all_leagues=LEAGUES,
+        locked_bl1=locked_bl1, locked_bl2=locked_bl2,
         wildcard_id=get_wildcard_id(scores_all))
+  except Exception:
+    app.logger.exception('Tips Fehler')
+    return render_template('errors/500.html'), 500
 
 @app.route('/tips/user/<int:uid>')
 @login_required
 def tips_user(uid):
     """Einzelansicht: Tipp eines Benutzers als eigene Tabelle."""
     season = get_active_season()
-    if not season or not season['season_started']:
-        flash('Tipps sind erst nach Beginn des ersten Spieltags sichtbar.', 'info')
+    is_admin = session.get('is_admin', False)
+    if not season:
+        flash('Keine aktive Saison.', 'info')
         return redirect(url_for('dashboard'))
+    season_d = dict(season)
+    locked_bl1 = bool(season_d.get('tips_locked') or season_d.get('locked_bl1', 0))
+    locked_bl2 = bool(season_d.get('tips_locked') or season_d.get('locked_bl2', 0))
+    if not is_admin and not locked_bl1 and not locked_bl2:
+        flash('Die Tipps sind erst sichtbar wenn die Tippabgabe für die jeweilige Liga abgelaufen ist.', 'info')
+        return redirect(url_for('dashboard'))
+    visible_leagues = {lg: LEAGUES[lg] for lg in ('bl1','bl2')
+                       if is_admin or (lg=='bl1' and locked_bl1) or (lg=='bl2' and locked_bl2)}
     db      = get_db()
     tipuser = db.execute('SELECT id,username,display_name FROM users WHERE id=? AND is_active=1', (uid,)).fetchone()
     if not tipuser:
@@ -2094,16 +2304,16 @@ def tips_user(uid):
         all_scores = db.execute(
             """SELECT user_id FROM scores JOIN users u ON scores.user_id=u.id
                WHERE season_id=? AND u.is_active=1
-               ORDER BY score DESC, std_deviation ASC, volltreffer DESC""",
+               ORDER BY score DESC, std_deviation ASC, volltreffer DESC, user_id ASC""",
             (season['id'],)
         ).fetchall()
         for i, s in enumerate(all_scores, 1):
             if s['user_id'] == uid:
                 user_rank = i; break
-    # Tipps pro Liga laden – nach aktuellem Tabellenplatz sortiert
-    preds = {'bl1': [], 'bl2': []}
+    # Tipps pro Liga laden – nur sichtbare Ligen
+    preds = {lg: [] for lg in ('bl1', 'bl2')}
     raw = db.execute(
-        """SELECT p.predicted_rank, p.team_id, t.name, t.short_name,
+        """SELECT p.predicted_rank, p.team_id, p.is_auto, t.name, t.short_name,
                   t.logo_url, t.league,
                   COALESCE(s.current_rank, NULL) as current_rank
            FROM predictions p
@@ -2113,13 +2323,16 @@ def tips_user(uid):
         (uid, season['id'])
     ).fetchall()
     for p in raw:
-        preds[p['league']].append(p)
+        if p['league'] in visible_leagues:   # gesperrte Ligen filtern
+            preds[p['league']].append(p)
     for lg in preds:
         preds[lg].sort(key=lambda p: standings_dict.get(p['team_id'], 99))
     return render_template('tips_user.html',
         season=season, tipuser=tipuser, score=score,
         user_rank=user_rank, preds=preds,
-        standings_dict=standings_dict, leagues=LEAGUES, max_score=MAX_SCORE)
+        standings_dict=standings_dict,
+        leagues=visible_leagues, all_leagues=LEAGUES,
+        max_score=MAX_SCORE)
 
 @app.route('/angsthasen')
 @login_required
@@ -2226,10 +2439,17 @@ def verlauf():
 def profile():
     db = get_db()
     if request.method == 'POST':
+        ip = get_client_ip()
+        locked, remaining = is_locked_out(ip)
+        if locked:
+            flash(f'Zu viele Fehlversuche. Bitte {remaining} Minute{"n" if remaining != 1 else ""} warten.', 'danger')
+            return redirect(url_for('profile'))
         user = db.execute('SELECT * FROM users WHERE id=?',(session['user_id'],)).fetchone()
         if not check_password_hash(user['password_hash'], request.form.get('current_password','')):
+            record_failed_attempt(ip, f'profile:{user["username"]}')
             flash('Aktuelles Passwort falsch.','danger')
         else:
+            clear_attempts(ip)
             updates, params = [], []
             dn = request.form.get('display_name','').strip()
             if dn: updates.append('display_name=?'); params.append(dn)
@@ -2265,7 +2485,7 @@ def profile():
                 """SELECT user_id FROM scores
                    JOIN users u ON scores.user_id=u.id
                    WHERE season_id=? AND u.is_active=1
-                   ORDER BY score DESC, std_deviation ASC, volltreffer DESC""",
+                   ORDER BY score DESC, std_deviation ASC, volltreffer DESC, user_id ASC""",
                 (season['id'],)
             ).fetchall()
             for i, s in enumerate(all_scores, 1):
@@ -2277,7 +2497,7 @@ def profile():
                           for s in get_standings(season['id'], lg)}
         # Tipps laden – nach aktuellem Tabellenplatz sortiert
         raw_preds = db.execute(
-            """SELECT p.predicted_rank, p.team_id, t.name, t.short_name,
+            """SELECT p.predicted_rank, p.team_id, p.is_auto, t.name, t.short_name,
                       t.logo_url, t.league,
                       COALESCE(s.current_rank, NULL) as current_rank
                FROM predictions p
@@ -2307,7 +2527,11 @@ def profile():
         legacy_rows=legacy_rows, legacy_wins=legacy_wins,
         legacy_top3=legacy_top3, legacy_best=legacy_best)
 
-# ── Admin ─────────────────────────────────────
+
+# ════════════════════════════════════════════════════════════
+# ROUTEN – ADMIN
+# ════════════════════════════════════════════════════════════
+
 @app.route('/admin')
 @admin_required
 def admin_dashboard():
@@ -2331,7 +2555,11 @@ def admin_users():
            FROM users u ORDER BY u.last_login DESC NULLS LAST, u.username""", {'sid':sid}
     ).fetchall()
     total = sum(team_count_per_league(sid).values())
-    return render_template('admin/users.html', users=users, season=season, total_teams=total)
+    nachfrist_map = {r['user_id']: dict(r) for r in get_db().execute(
+        'SELECT user_id, expires_at, strafgeld, notiz FROM nachfrist WHERE season_id=? AND revoked_at IS NULL', (sid,)
+    ).fetchall()} if sid else {}
+    return render_template('admin/users.html', users=users, season=season,
+                           total_teams=total, nachfrist_map=nachfrist_map)
 
 @app.route('/admin/users/add', methods=['GET','POST'])
 @admin_required
@@ -2397,6 +2625,103 @@ def admin_edit_user(uid):
         flash(f'"{eu["username"]}" aktualisiert.','success'); return redirect(url_for('admin_users'))
     return render_template('admin/user_form.html', edit_user=eu)
 
+@app.route('/admin/users/<int:uid>/nachfrist', methods=['POST'])
+@admin_required
+def admin_nachfrist(uid):
+    """Nachfrist gewähren oder entziehen."""
+    db     = get_db()
+    season = get_active_season()
+    if not season:
+        flash('Keine aktive Saison.', 'danger')
+        return redirect(url_for('admin_users'))
+    user = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
+    if not user:
+        flash('Benutzer nicht gefunden.', 'danger')
+        return redirect(url_for('admin_users'))
+
+    action    = request.form.get('action', 'grant')
+    expires   = request.form.get('expires', '').strip() or None
+    strafgeld = request.form.get('strafgeld', '').strip()
+    notiz     = request.form.get('notiz', '').strip()
+    name      = user['display_name'] or user['username']
+
+    if action == 'revoke':
+        db.execute('UPDATE nachfrist SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=? AND season_id=?',
+                   (uid, season['id']))
+        db.commit()
+        flash(f'Nachfrist für „{name}" beendet (Historie bleibt für den Rückblick erhalten).', 'success')
+    else:
+        db.execute('''INSERT INTO nachfrist (user_id, season_id, expires_at, granted_by, strafgeld, notiz, revoked_at)
+                      VALUES (?,?,?,?,?,?,NULL)
+                      ON CONFLICT(user_id) DO UPDATE SET
+                        season_id=excluded.season_id, expires_at=excluded.expires_at,
+                        granted_at=CURRENT_TIMESTAMP, granted_by=excluded.granted_by,
+                        strafgeld=excluded.strafgeld, notiz=excluded.notiz, revoked_at=NULL''',
+                   (uid, season['id'], expires, session['user_id'], strafgeld, notiz))
+        db.commit()
+
+        expires_str = f' bis {expires}' if expires else ' (unbegrenzt)'
+        flash(f'✅ Nachfrist für „{name}" gewährt{expires_str}.', 'success')
+
+        # Telegram-Benachrichtigung
+        try:
+            import telegram_bot as _tg
+            db2 = get_db()
+            msg = (f'⏰ <b>Nachfrist</b>\n'
+                   f'{name} hat eine Nachfrist erhalten{expires_str}.\n'
+                   + (f'Strafgeld: {strafgeld}\n' if strafgeld else '')
+                   + (f'Notiz: {notiz}' if notiz else ''))
+            _tg.send_message(db2, msg)
+        except Exception as e:
+            app.logger.debug(f'Telegram Nachfrist: {e}')
+
+    return redirect(url_for('admin_users'))
+
+
+@app.route('/admin/users/<int:uid>/impersonate', methods=['POST'])
+@admin_required
+def admin_impersonate(uid):
+    """Einloggen als User – Admin kann App aus Nutzerperspektive sehen."""
+    user = get_db().execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
+    if not user:
+        flash('Benutzer nicht gefunden.', 'danger')
+        return redirect(url_for('admin_users'))
+    # Admin-Session merken
+    session['impersonator_id']   = session['user_id']
+    session['impersonator_name'] = session.get('username', 'Admin')
+    # Als User einloggen (ohne Admin-Rechte)
+    session['user_id']  = user['id']
+    session['username'] = user['username']
+    session['is_admin'] = False
+    from markupsafe import Markup
+    flash(Markup(f'👁️ Du siehst die App jetzt als „{user["display_name"] or user["username"]}". '
+          f'<a href="/admin/stop-impersonate" class="alert-link">← Zurück zum Admin</a>'), 'info')
+    return redirect(url_for('dashboard'))
+
+
+@app.route('/admin/stop-impersonate')
+@login_required
+def admin_stop_impersonate():
+    """Zurück zum eigenen Admin-Account."""
+    imp_id   = session.pop('impersonator_id', None)
+    imp_name = session.pop('impersonator_name', 'Admin')
+    if not imp_id:
+        flash('Kein Impersonation aktiv.', 'warning')
+        return redirect(url_for('dashboard'))
+    admin = get_db().execute('SELECT * FROM users WHERE id=?', (imp_id,)).fetchone()
+    if not admin or not admin['is_admin'] or not admin['is_active']:
+        # Admin-Rechte wurden zwischenzeitlich entzogen (oder Account deaktiviert) –
+        # NICHT als Admin zurückschalten, sondern normal ausloggen.
+        session.clear()
+        flash('Admin-Rechte des Ursprungskontos sind nicht mehr gültig. Bitte neu anmelden.', 'danger')
+        return redirect(url_for('login'))
+    session['user_id']  = admin['id']
+    session['username'] = admin['username']
+    session['is_admin'] = True
+    flash(f'✅ Zurück als Admin „{imp_name}".', 'success')
+    return redirect(url_for('admin_users'))
+
+
 @app.route('/admin/users/<int:uid>/delete', methods=['POST'])
 @admin_required
 def admin_delete_user(uid):
@@ -2411,35 +2736,15 @@ def admin_delete_user(uid):
             db.execute('PRAGMA foreign_keys = OFF')
             for table in ('predictions', 'scores', 'ranking_snapshots',
                           'matchday_highlights', 'email_reminders',
-                          'login_attempts', 'chat_reactions',
-                          'push_subscriptions', 'user_badges', 'poll_votes'):
+                          'login_attempts', 'push_subscriptions', 'user_badges'):
                 try:
                     db.execute(f'DELETE FROM {table} WHERE user_id=?', (uid,))
                 except Exception as e:
                     app.logger.debug(f"Ignorierter Fehler: {e}")
-            # Polls die dieser User erstellt hat
-            try:
-                poll_ids = [r['id'] for r in db.execute(
-                    'SELECT id FROM polls WHERE created_by=?', (uid,)).fetchall()]
-                for pid in poll_ids:
-                    db.execute('DELETE FROM poll_votes WHERE poll_id=?', (pid,))
-                    db.execute('DELETE FROM poll_options WHERE poll_id=?', (pid,))
-                db.execute('DELETE FROM polls WHERE created_by=?', (uid,))
-            except Exception as e:
-                app.logger.debug(f"Ignorierter Fehler: {e}")
             # Legacy-Archiv: user_id auf NULL setzen
             try:
                 db.execute('UPDATE legacy_results SET user_id=NULL WHERE user_id=?', (uid,))
                 db.execute('DELETE FROM legacy_name_map WHERE user_id=?', (uid,))
-            except Exception as e:
-                app.logger.debug(f"Ignorierter Fehler: {e}")
-            # Chat-Nachrichten
-            try:
-                msg_ids = [r['id'] for r in db.execute(
-                    'SELECT id FROM chat_messages WHERE user_id=?', (uid,)).fetchall()]
-                for mid in msg_ids:
-                    db.execute('DELETE FROM chat_reactions WHERE message_id=?', (mid,))
-                db.execute('DELETE FROM chat_messages WHERE user_id=?', (uid,))
             except Exception as e:
                 app.logger.debug(f"Ignorierter Fehler: {e}")
             db.execute('DELETE FROM users WHERE id=?', (uid,))
@@ -2449,8 +2754,8 @@ def admin_delete_user(uid):
         else:
             flash('Benutzer nicht gefunden.', 'danger')
     except Exception:
-        import traceback
-        return f'<pre style="padding:2rem;color:red"><b>Fehler beim Löschen:</b>\n{traceback.format_exc()}</pre>', 500
+        app.logger.exception('Fehler beim Löschen eines Benutzers')
+        flash('Fehler beim Löschen des Benutzers. Details siehe Server-Log.', 'danger')
     return redirect(url_for('admin_users'))
 
 @app.route('/admin/teams')
@@ -3025,18 +3330,21 @@ h2,h3{{color:#1a5e2a}}.ok{{color:green}}.warn{{color:orange}}</style></head><bod
 {tg_html}
 <tr><td colspan=3 style="padding-top:.5rem">
   <form method="POST" action="/admin/telegram/reset-dedup" style="display:inline-flex;gap:.5rem;flex-wrap:wrap">
+    <input type="hidden" name="csrf_token" value="{get_csrf_token()}">
     <input type="hidden" name="key" value="rangliste">
     <button style="padding:.3rem .7rem;background:#0d6efd;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:.8rem">
       🔄 Rangliste-Deduplizierung zurücksetzen
     </button>
   </form>
   <form method="POST" action="/admin/telegram/reset-dedup" style="display:inline-flex;gap:.5rem;flex-wrap:wrap;margin-top:.25rem">
+    <input type="hidden" name="csrf_token" value="{get_csrf_token()}">
     <input type="hidden" name="key" value="highlight">
     <button style="padding:.3rem .7rem;background:#6c757d;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:.8rem">
       🔄 Highlight-Deduplizierung zurücksetzen
     </button>
   </form>
   <form method="POST" action="/admin/telegram/reset-dedup" style="display:inline-flex;gap:.5rem;flex-wrap:wrap;margin-top:.25rem">
+    <input type="hidden" name="csrf_token" value="{get_csrf_token()}">
     <input type="hidden" name="key" value="both">
     <button style="padding:.3rem .7rem;background:#dc3545;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:.8rem">
       🔄 Beide zurücksetzen
@@ -3146,8 +3454,16 @@ def admin_season():
                 db.commit(); flash('Neue Saison erstellt.','success')
         elif action == 'toggle_lock' and season:
             new = 0 if season['tips_locked'] else 1
-            db.execute('UPDATE seasons SET tips_locked=? WHERE id=?',(new,season['id'])); db.commit()
-            flash('Tippabgabe ' + ('gesperrt.' if new else 'geöffnet.'),'info')
+            if new == 0:
+                # Öffnen: alle Liga-Sperren zurücksetzen
+                db.execute(
+                    'UPDATE seasons SET tips_locked=0, locked_bl1=0, locked_bl2=0 WHERE id=?',
+                    (season['id'],)
+                )
+            else:
+                db.execute('UPDATE seasons SET tips_locked=1 WHERE id=?', (season['id'],))
+            db.commit()
+            flash('Tippabgabe ' + ('gesperrt.' if new else 'geöffnet.'), 'info')
         elif action == 'toggle_started' and season:
             new = 0 if season['season_started'] else 1
             db.execute('UPDATE seasons SET season_started=? WHERE id=?',(new,season['id']))
@@ -3250,7 +3566,7 @@ def admin_season_export_csv(sid):
             """SELECT sc.*, u.display_name, u.username
                FROM scores sc JOIN users u ON sc.user_id = u.id
                WHERE sc.season_id = ? AND u.is_active = 1
-               ORDER BY sc.score DESC, sc.std_deviation ASC, sc.volltreffer DESC""",
+               ORDER BY sc.score DESC, sc.std_deviation ASC, sc.volltreffer DESC, sc.user_id ASC""",
             (sid,)
         ).fetchall()
 
@@ -3315,9 +3631,14 @@ def admin_season_export_csv(sid):
         return resp
 
     except Exception:
-        import traceback
-        return f'<pre style="padding:2rem;color:red"><b>CSV-Export Fehler:</b>\n{traceback.format_exc()}</pre>', 500
+        app.logger.exception('CSV-Export Fehler')
+        flash('CSV-Export fehlgeschlagen. Details siehe Server-Log.', 'danger')
+        return redirect(url_for('admin_season'))
 
+
+# ════════════════════════════════════════════════════════════
+# ROUTEN – STATISTIKEN & ANALYSE
+# ════════════════════════════════════════════════════════════
 # ── Ewige Tabelle ─────────────────────────────
 
 @app.route('/admin/rebuild_history_stream')
@@ -3739,14 +4060,12 @@ def spieltage_api(league, year, matchday):
                 app.logger.debug(f"Ignorierter Fehler: {e}")
         return jsonify({'ok': False, 'error': str(e)})
 
-# ── Chat ──────────────────────────────────────
 # ── Admin Backup & Restore ─────────────────────
 @app.route('/admin/backup', methods=['POST'])
 @admin_required
 def admin_backup():
     """Selektives Backup als ZIP – Inhalt per Checkboxen wählbar."""
     import zipfile, io as _io
-    from flask import send_file
     include_db      = 'include_db'      in request.form
     include_uploads = 'include_uploads' in request.form
     include_config  = 'include_config'  in request.form
@@ -3821,7 +4140,6 @@ def admin_backup_page():
         'users':       db.execute('SELECT COUNT(*) FROM users WHERE is_active=1').fetchone()[0],
         'predictions': db.execute('SELECT COUNT(*) FROM predictions').fetchone()[0],
         'seasons':     db.execute('SELECT COUNT(*) FROM seasons').fetchone()[0],
-        'chat':        db.execute('SELECT COUNT(*) FROM chat_messages').fetchone()[0],
     }
     return render_template('admin/backup.html',
         db_size=db_size, db_mtime=db_mtime, stats=stats,
@@ -4268,7 +4586,7 @@ def save_matchday_highlight(season_id, matchday):
         """SELECT user_id, score FROM scores
            JOIN users u ON scores.user_id=u.id
            WHERE season_id=? AND u.is_active=1
-           ORDER BY score DESC, std_deviation ASC, volltreffer DESC""",
+           ORDER BY score DESC, std_deviation ASC, volltreffer DESC, user_id ASC""",
         (season_id,)
     ).fetchall()
     # Vorherige Rangliste (letzter Snapshot)
@@ -4330,6 +4648,7 @@ def highlights():
 @app.route('/rueckblick')
 @login_required
 def rueckblick():
+  try:
     season = get_active_season()
     if not season:
         flash('Keine aktive Saison.','warning')
@@ -4341,7 +4660,7 @@ def rueckblick():
                   sc.total_deviation,sc.volltreffer,sc.max_deviation,sc.std_deviation
            FROM scores sc JOIN users u ON sc.user_id=u.id
            WHERE sc.season_id=? AND u.is_active=1
-           ORDER BY sc.score DESC, sc.std_deviation ASC, sc.volltreffer DESC""",
+           ORDER BY sc.score DESC, sc.std_deviation ASC, sc.volltreffer DESC, sc.user_id ASC""",
         (season['id'],)
     ).fetchall()
     standings = {'bl1': get_standings(season['id'],'bl1'),
@@ -4426,6 +4745,75 @@ def rueckblick():
                 max_bl2 = ligs['bl2']['dev']; wildcard_bl2_ids = {uid}
             elif ligs['bl2']['dev'] == max_bl2:
                 wildcard_bl2_ids.add(uid)
+    # ── Zu spät abgegeben & Nachfrist ──────────────────────────
+    dl_bl1 = season['deadline_bl1']
+    dl_bl2 = season['deadline_bl2']
+    tip_times_bl1 = {r['user_id']: r['last_tip'] for r in db.execute(
+        """SELECT p.user_id, MAX(p.updated_at) as last_tip
+           FROM predictions p JOIN teams t ON p.team_id=t.id
+           WHERE p.season_id=? AND t.league='bl1' GROUP BY p.user_id""", (season['id'],)).fetchall()}
+    tip_times_bl2 = {r['user_id']: r['last_tip'] for r in db.execute(
+        """SELECT p.user_id, MAX(p.updated_at) as last_tip
+           FROM predictions p JOIN teams t ON p.team_id=t.id
+           WHERE p.season_id=? AND t.league='bl2' GROUP BY p.user_id""", (season['id'],)).fetchall()}
+    all_active_users = db.execute(
+        'SELECT id, username, display_name FROM users WHERE is_active=1'
+    ).fetchall()
+    zu_spaet = []
+    for u in all_active_users:
+        uid  = u['id']
+        name = u['display_name'] or u['username']
+        has_bl1 = uid in tip_times_bl1
+        has_bl2 = uid in tip_times_bl2
+        late_bl1 = dl_bl1 and has_bl1 and tip_times_bl1[uid] > str(dl_bl1)
+        late_bl2 = dl_bl2 and has_bl2 and tip_times_bl2[uid] > str(dl_bl2)
+        missing_bl1 = dl_bl1 and not has_bl1
+        missing_bl2 = dl_bl2 and not has_bl2
+        nf = db.execute('SELECT * FROM nachfrist WHERE user_id=? AND season_id=?',
+                        (uid, season['id'])).fetchone()
+        if late_bl1 or late_bl2 or missing_bl1 or missing_bl2 or nf:
+            zu_spaet.append({
+                'name': name, 'user_id': uid,
+                'late_bl1': late_bl1, 'late_bl2': late_bl2,
+                'missing_bl1': missing_bl1, 'missing_bl2': missing_bl2,
+                'nachfrist': dict(nf) if nf else None,
+                'nachfrist_active': bool(nf and not nf['revoked_at']),
+            })
+
+    # ── Volltreffer-König ────────────────────────────────────────
+    vk_scores = sorted(scores, key=lambda s: s['volltreffer'] or 0, reverse=True)
+    max_vt = vk_scores[0]['volltreffer'] if vk_scores else 0
+    volltreffer_koenige = [s for s in vk_scores if (s['volltreffer'] or 0) == max_vt and max_vt > 0]
+
+    # ── Größter Aufsteiger / Absteiger ──────────────────────────
+    # Vergleich: Ranking-Snapshot Spieltag 1 vs. Endstand
+    first_snap = db.execute(
+        """SELECT user_id, rank FROM ranking_snapshots
+           WHERE season_id=? ORDER BY matchday ASC LIMIT 1""", (season['id'],)
+    ).fetchone()
+    aufsteiger = absteiger = None
+    if first_snap:
+        early_ranks = {r['user_id']: r['rank'] for r in db.execute(
+            """SELECT user_id, rank FROM ranking_snapshots
+               WHERE season_id=? AND matchday=(
+                   SELECT MIN(matchday) FROM ranking_snapshots WHERE season_id=?)""",
+            (season['id'], season['id'])).fetchall()}
+        final_ranks = {s['id']: i+1 for i, s in enumerate(scores)}
+        best_gain = worst_gain = 0
+        for s in scores:
+            uid = s['id']
+            if uid in early_ranks and uid in final_ranks:
+                gain = early_ranks[uid] - final_ranks[uid]  # positiv = aufgestiegen
+                name = s['display_name'] or s['username']
+                if gain > best_gain:
+                    best_gain = gain
+                    aufsteiger = {'name': name, 'gain': gain,
+                                  'from': early_ranks[uid], 'to': final_ranks[uid]}
+                if gain < worst_gain:
+                    worst_gain = gain
+                    absteiger = {'name': name, 'gain': gain,
+                                 'from': early_ranks[uid], 'to': final_ranks[uid]}
+
     return render_template('rueckblick.html',
         season=season, scores=scores, standings=standings,
         highlights=highlights_rows, team_stats=team_stats,
@@ -4435,8 +4823,13 @@ def rueckblick():
         wildcard_bl1_ids=wildcard_bl1_ids, wildcard_bl2_ids=wildcard_bl2_ids,
         season_badges=season_badges, badge_defs=BADGE_DEFS,
         max_dev_map=max_dev_map,
+        zu_spaet=zu_spaet, volltreffer_koenige=volltreffer_koenige,
+        aufsteiger=aufsteiger, absteiger=absteiger,
         leagues=LEAGUES, max_score=MAX_SCORE,
         now_local=local_now_str())
+  except Exception:
+    app.logger.exception('Rueckblick Fehler')
+    return render_template('errors/500.html'), 500
 
 # ── Team-Statistik ───────────────────────────
 @app.route('/teamstatistik')
@@ -4516,8 +4909,6 @@ def teamstatistik():
         contested=contested, consensus=consensus,
         leagues=LEAGUES)
 
-# ── Chat-Reaktionen (👍/👎) ───────────────────
-# ── Chat-Umfragen ─────────────────────────────
 # ── Spieltag-Kalender ────────────────────────────────────────
 
 # ── Web Push ─────────────────────────────────────────────────
@@ -4708,7 +5099,11 @@ def inject_globals():
     """Globale Template-Variable: Theme."""
     return {'theme': session.get('theme', 'light')}
 
-# ── Medien & Externe Links ────────────────────
+
+# ════════════════════════════════════════════════════════════
+# ROUTEN – MEDIEN & EXTERNE LINKS
+# ════════════════════════════════════════════════════════════
+
 import uuid, mimetypes
 from werkzeug.utils import secure_filename
 
@@ -4824,8 +5219,6 @@ def medien():
     ext_links = db.execute(
         'SELECT * FROM external_links WHERE is_active=1 ORDER BY sort_order, title'
     ).fetchall()
-    # pCloud-Links
-    pcfg = get_pcloud_config()
     # Statistik: Anzahl nach Typ / Dateiendung
     all_files = db.execute('SELECT file_type, orig_name FROM media_files').fetchall()
     media_stats = {'image': 0, 'video': 0, 'audio': 0, 'pdf': 0, 'word': 0, 'excel': 0, 'other_doc': 0}
@@ -4850,14 +5243,12 @@ def medien():
     return render_template('medien.html',
         folders=folders, folder_files=folder_files,
         unassigned=unassigned, ext_links=ext_links,
-        newest_folder_id=newest_folder_id,
-        pcfg=pcfg, media_stats=media_stats)
+        newest_folder_id=newest_folder_id, media_stats=media_stats)
 
 @app.route('/medien/uploads/<filename>')
 @login_required
 def media_file(filename):
     """Geschützte Auslieferung von Upload-Dateien mit korrektem MIME-Type."""
-    from flask import send_from_directory
     import mimetypes
     # MIME-Types für Browser-native Wiedergabe
     mime_map = {
@@ -5098,25 +5489,11 @@ def admin_links():
     links = db.execute('SELECT * FROM external_links ORDER BY sort_order,title').fetchall()
     return render_template('admin/links.html', links=links)
 
-# ── pCloud (vereinfacht) ──────────────────────
-def _pcloud_extract_code(url_or_code):
-    """Extrahiert den Code aus einer pCloud-URL oder gibt den Code direkt zurück."""
-    if not url_or_code:
-        return ''
-    s = url_or_code.strip()
-    if 'code=' in s:
-        try:
-            params = parse_qs(urlparse(s).query)
-            return params.get('code', [s])[0]
-        except Exception as e:
-            app.logger.debug(f"Ignorierter Fehler: {e}")
-    return s
 
-def get_pcloud_config():
-    row = get_db().execute('SELECT * FROM pcloud_config WHERE id=1').fetchone()
-    return dict(row) if row else None
+# ════════════════════════════════════════════════════════════
+# ROUTEN – TELEGRAM & WEB PUSH
+# ════════════════════════════════════════════════════════════
 
-# ── Telegram ──────────────────────────────────────────────────
 
 @app.route('/admin/telegram', methods=['GET','POST'])
 @admin_required
@@ -5224,7 +5601,11 @@ def telegram_webhook(token):
 
 # ── Hilfe / Benutzerhandbuch ─────────────────────────────────
 
-# ── Archiv ─────────────────────────────────────────────────────
+
+# ════════════════════════════════════════════════════════════
+# ROUTEN – ARCHIV (HISTORISCHE DATEN)
+# ════════════════════════════════════════════════════════════
+
 @app.route('/archiv')
 @login_required
 def archiv():
@@ -5261,8 +5642,8 @@ def archiv():
                                all_tippers=all_tippers,
                                max_abw1=max_abw1, max_abw2=max_abw2)
     except Exception:
-        import traceback
-        return f'<pre style="padding:2rem;color:red"><b>Archiv-Fehler:</b>\n{traceback.format_exc()}</pre>', 500
+        app.logger.exception('Archiv Fehler')
+        return render_template('errors/500.html'), 500
 
 
 @app.route('/archiv/karriere/<tipper_name>')
@@ -5457,9 +5838,9 @@ def admin_archiv_import():
                         inserted += 1
                 db.commit()
                 flash(f'Import abgeschlossen: {inserted} neu, {updated} aktualisiert.', 'success')
-            except Exception as e:
-                import traceback
-                return f'<pre style="padding:2rem;color:red"><b>Import-Fehler:</b>\n{traceback.format_exc()}</pre>', 500
+            except Exception:
+                app.logger.exception('Import-Fehler (Abschlusstabellen)')
+                flash('Import fehlgeschlagen. Details siehe Server-Log.', 'danger')
             return redirect(url_for('admin_archiv_import'))
 
         elif action == 'delete_season':
@@ -5542,8 +5923,8 @@ def admin_archiv_import():
                 db.commit()
                 flash(f'Angsthasen-Import: {inserted} neu, {updated} aktualisiert.', 'success')
             except Exception:
-                import traceback
-                return f'<pre style="padding:2rem;color:red"><b>Import-Fehler:</b>\n{traceback.format_exc()}</pre>', 500
+                app.logger.exception('Import-Fehler (Angsthasen)')
+                flash('Import fehlgeschlagen. Details siehe Server-Log.', 'danger')
             return redirect(url_for('admin_archiv_import'))
 
     # GET – Übersichtsseite
@@ -5567,9 +5948,91 @@ def admin_archiv_import():
                                angst_count=angst_count, angst_seasons=angst_seasons,
                                all_names=all_names, users=users, name_map=name_map,
                                available_seasons=available_seasons)
-    except Exception as e:
-        import traceback
-        return f'<pre style="padding:2rem;color:red"><b>Fehler in admin_archiv_import:</b>\n{traceback.format_exc()}</pre>', 500
+    except Exception:
+        app.logger.exception('Fehler in admin_archiv_import')
+        return render_template('errors/500.html'), 500
+
+
+@app.route('/tipp-status')
+@login_required
+def tipp_status():
+    """Öffentliche Übersicht: Wer hat wann getippt, wer fehlt noch."""
+    season = get_active_season()
+    if not season:
+        flash('Keine aktive Saison.', 'info')
+        return redirect(url_for('dashboard'))
+    db  = get_db()
+    sid = season['id']
+
+    # Alle aktiven User
+    users = db.execute(
+        'SELECT id, username, display_name FROM users WHERE is_active=1 ORDER BY display_name, username'
+    ).fetchall()
+
+    # Letzter Tipp-Zeitpunkt pro User UND Liga getrennt
+    tip_times_bl1 = {r['user_id']: r['last_tip'] for r in db.execute(
+        """SELECT p.user_id, MAX(p.updated_at) as last_tip
+           FROM predictions p JOIN teams t ON p.team_id=t.id
+           WHERE p.season_id=? AND t.league='bl1'
+           GROUP BY p.user_id""", (sid,)
+    ).fetchall()}
+    tip_times_bl2 = {r['user_id']: r['last_tip'] for r in db.execute(
+        """SELECT p.user_id, MAX(p.updated_at) as last_tip
+           FROM predictions p JOIN teams t ON p.team_id=t.id
+           WHERE p.season_id=? AND t.league='bl2'
+           GROUP BY p.user_id""", (sid,)
+    ).fetchall()}
+    # Letzter Tipp-Zeitpunkt gesamt (für Anzeige)
+    tip_times = {r['user_id']: r['last_tip'] for r in db.execute(
+        'SELECT user_id, MAX(updated_at) as last_tip FROM predictions WHERE season_id=? GROUP BY user_id',
+        (sid,)
+    ).fetchall()}
+
+    # Anzahl getippter Teams pro User (vollständig = 36 Teams)
+    tip_counts = {r['user_id']: r['cnt'] for r in db.execute(
+        'SELECT user_id, COUNT(*) as cnt FROM predictions WHERE season_id=? GROUP BY user_id',
+        (sid,)
+    ).fetchall()}
+
+    # Deadlines
+    dl_bl1 = season['deadline_bl1']
+    dl_bl2 = season['deadline_bl2']
+
+    rows = []
+    for u in users:
+        uid      = u['id']
+        last_tip = tip_times.get(uid)
+        cnt      = tip_counts.get(uid, 0)
+        complete = cnt >= 36   # 18 BL1 + 18 BL2
+
+        # Rechtzeitigkeit pro Liga separat prüfen
+        last_bl1 = tip_times_bl1.get(uid)
+        last_bl2 = tip_times_bl2.get(uid)
+        on_time_bl1 = on_time_bl2 = None
+        if dl_bl1 and last_bl1:
+            try: on_time_bl1 = last_bl1 <= str(dl_bl1)
+            except Exception: pass
+        if dl_bl2 and last_bl2:
+            try: on_time_bl2 = last_bl2 <= str(dl_bl2)
+            except Exception: pass
+
+        rows.append({
+            'user':        u,
+            'last_tip':    last_tip,
+            'count':       cnt,
+            'complete':    complete,
+            'on_time_bl1': on_time_bl1,
+            'on_time_bl2': on_time_bl2,
+        })
+
+    # Sortierung: erst vollständig abgegeben, dann fehlend; innerhalb nach Zeit
+    rows.sort(key=lambda r: (not r['complete'], r['last_tip'] or '9999'))
+
+    return render_template('tipp_status.html',
+        season=season, rows=rows,
+        dl_bl1=dl_bl1, dl_bl2=dl_bl2,
+        total_users=len(users),
+        done_count=sum(1 for r in rows if r['complete']))
 
 
 @app.route('/hilfe')
@@ -5836,7 +6299,144 @@ def admin_handbuch():
                            filename='BENUTZERHANDBUCH.md')
 
 
-# ── Cron-Update-Endpunkt ──────────────────────────────────────────────────────
+
+# ════════════════════════════════════════════════════════════
+# DOMAIN-MIGRATION (tippcup.com)
+# ════════════════════════════════════════════════════════════
+
+@app.route('/admin/migration')
+@admin_required
+def admin_migration():
+    """Übersicht und Tools für den Domain-Umzug."""
+    db    = get_db()
+    psubs = db.execute('SELECT COUNT(*) FROM push_subscriptions').fetchone()[0]
+    tg_wh = (db.execute("SELECT value FROM config WHERE key='telegram_webhook_url'").fetchone() or {}).get('value', '')
+    import socket
+    hostname = socket.gethostname()
+    return render_template_string('''<!doctype html><html><head><meta charset="utf-8">
+<title>Domain-Migration</title>
+<style>
+body{font-family:sans-serif;max-width:700px;margin:2rem auto;padding:1rem}
+.card{border:1px solid #ddd;border-radius:8px;padding:1.25rem;margin-bottom:1rem}
+.card h3{margin:0 0 .75rem;color:#1a5e2a}
+.badge-ok{background:#d1e7dd;color:#0f5132;padding:.2rem .5rem;border-radius:4px;font-size:.8rem}
+.badge-warn{background:#fff3cd;color:#664d03;padding:.2rem .5rem;border-radius:4px;font-size:.8rem}
+.badge-err{background:#f8d7da;color:#842029;padding:.2rem .5rem;border-radius:4px;font-size:.8rem}
+.btn{display:inline-block;padding:.4rem .9rem;border-radius:5px;text-decoration:none;
+     color:#fff;background:#1a5e2a;border:none;cursor:pointer;font-size:.9rem;margin:.2rem 0}
+.btn-danger{background:#dc3545}
+.btn-info{background:#0d6efd}
+pre{background:#f8f9fa;padding:.75rem;border-radius:4px;font-size:.8rem;overflow-x:auto}
+</style></head><body>
+<h2>🔀 Domain-Migration Tippcup</h2>
+
+<div class="card">
+  <h3>1. Status</h3>
+  <p>Server: <code>{{ hostname }}</code></p>
+  <p>Push-Subscriptions in DB: 
+    <span class="{{ "badge-warn" if psubs > 0 else "badge-ok" }}">
+      {{ psubs }} {% if psubs > 0 %}(werden nach Umzug ungültig){% else %}(keine){% endif %}
+    </span>
+  </p>
+  <p>Telegram Webhook: 
+    <span class="{{ "badge-ok" if "tippcup.com" in (tg_wh or "") else "badge-warn" }}">
+      {{ tg_wh or "nicht gesetzt" }}
+    </span>
+  </p>
+</div>
+
+<div class="card">
+  <h3>2. Push-Subscriptions löschen</h3>
+  <p class="text-muted" style="color:#666;font-size:.9rem">
+    Push-Subscriptions sind an die alte Domain gebunden und müssen nach dem Umzug
+    gelöscht werden. Nutzer aktivieren Push auf der neuen Domain neu.
+  </p>
+  <form method="POST" action="/admin/migration/clear-push"
+        onsubmit="return confirm('Alle {{ psubs }} Push-Subscriptions löschen?')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-danger">🗑️ Alle Push-Subscriptions löschen ({{ psubs }})</button>
+  </form>
+</div>
+
+<div class="card">
+  <h3>3. Telegram Webhook aktualisieren</h3>
+  <p style="font-size:.9rem;color:#666">
+    Nach dem Umzug muss der Telegram-Bot-Webhook auf die neue Domain zeigen.
+  </p>
+  <form method="POST" action="/admin/migration/update-webhook">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="text" name="new_url" placeholder="https://tippcup.com/telegram/webhook"
+           style="width:100%;padding:.4rem;margin-bottom:.5rem;box-sizing:border-box;font-size:.9rem">
+    <button class="btn btn-info">🤖 Webhook aktualisieren</button>
+  </form>
+</div>
+
+<div class="card">
+  <h3>4. Checkliste Umzug</h3>
+  <pre>☐ 1. tippcup.com in Plesk anlegen + SSL (Let's Encrypt)
+☐ 2. App-Dateien auf neue Domain kopieren
+☐ 3. passenger_wsgi.py: DB_PATH anpassen (neuer Pfad)
+☐ 4. VAPID-Keys: GLEICHE Keys aus alter passenger_wsgi.py übernehmen!
+☐ 5. DB-Datei kopieren: tippspiel.db → neuer Pfad
+☐ 6. App auf neuer Domain testen
+☐ 7. Push-Subscriptions löschen (Button oben)
+☐ 8. Telegram Webhook aktualisieren (Button oben)
+☐ 9. 301-Redirect: liga.tippcup.com → tippcup.com (Plesk → Hosting → Redirects)
+☐10. Nutzer informieren: PWA neu installieren, Push neu aktivieren</pre>
+</div>
+
+<p><a href="/admin/season">← Admin</a></p>
+</body></html>''', psubs=psubs, tg_wh=tg_wh, hostname=hostname)
+
+
+@app.route('/admin/migration/clear-push', methods=['POST'])
+@admin_required
+def admin_migration_clear_push():
+    db = get_db()
+    n  = db.execute('SELECT COUNT(*) FROM push_subscriptions').fetchone()[0]
+    db.execute('DELETE FROM push_subscriptions')
+    db.commit()
+    flash(f'✅ {n} Push-Subscriptions gelöscht. Nutzer können Push auf der neuen Domain neu aktivieren.', 'success')
+    return redirect(url_for('admin_migration'))
+
+
+@app.route('/admin/migration/update-webhook', methods=['POST'])
+@admin_required
+def admin_migration_update_webhook():
+    new_url = request.form.get('new_url', '').strip()
+    if not new_url.startswith('https://'):
+        flash('URL muss mit https:// beginnen.', 'danger')
+        return redirect(url_for('admin_migration'))
+    # Telegram Webhook setzen
+    tg_token = get_config('telegram_token', '')
+    if not tg_token:
+        flash('Kein Telegram-Token konfiguriert.', 'danger')
+        return redirect(url_for('admin_migration'))
+    try:
+        import requests as _req
+        r = _req.post(
+            f'https://api.telegram.org/bot{tg_token}/setWebhook',
+            json={'url': new_url}, timeout=10
+        )
+        data = r.json()
+        if data.get('ok'):
+            get_db().execute(
+                "INSERT OR REPLACE INTO config (key,value) VALUES ('telegram_webhook_url',?)",
+                (new_url,)
+            )
+            get_db().commit()
+            flash(f'✅ Telegram Webhook gesetzt: {new_url}', 'success')
+        else:
+            flash(f'Telegram Fehler: {data.get("description","?")}', 'danger')
+    except Exception as e:
+        flash(f'Fehler: {e}', 'danger')
+    return redirect(url_for('admin_migration'))
+
+
+# ════════════════════════════════════════════════════════════
+# CRON, SONSTIGES
+# ════════════════════════════════════════════════════════════
+
 
 @app.route('/cron/update/<token>')
 def cron_update(token):

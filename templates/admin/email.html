@@ -25,7 +25,7 @@
           <a href="{{ url_for('admin_users') }}">Benutzer</a> eintragen.
         </div>
         {% else %}
-        <form method="POST">
+        <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="action" value="send_all">
           <div class="mb-3">
             <label class="form-label fw-semibold">Empfänger</label>
@@ -81,7 +81,7 @@
             Für <strong>GMX/Web.de</strong>: Host <code>mail.gmx.net</code> bzw. <code>smtp.web.de</code>, Port <code>587</code>.<br>
             Für <strong>Netcup / eigenen Server</strong>: Zugangsdaten aus dem Mail-Paket.
           </div>
-          <form method="POST">
+          <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="save_smtp">
             <div class="row g-3">
               <div class="col-8">
@@ -130,7 +130,7 @@
           </form>
           <!-- Test-E-Mail -->
           <hr>
-          <form method="POST" class="d-flex gap-2 align-items-end flex-wrap">
+          <form method="POST" class="d-flex gap-2 align-items-end flex-wrap"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="test_smtp">
             <div class="flex-grow-1">
               <label class="form-label small fw-semibold">Test-E-Mail senden</label>
