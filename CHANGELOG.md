@@ -4,6 +4,71 @@ Alle wesentlichen Änderungen am Tippcup-Projekt werden hier dokumentiert.
 
 ---
 
+## [Aktuell] – September 2026 – Backup-Bereich aufgeräumt & granulares Restore
+
+Vollständige Überprüfung des Backup/Restore-Bereichs auf Wunsch (Dopplungen,
+Übersichtlichkeit, Granularität). Ergebnisse und Fixes:
+
+### Gefunden & behoben
+- **Config-Helper-Dopplung:** `_get_config_value`/`_set_config_value`
+  (aus dem Backup-Feature) waren eine unnötige Kopie der bereits
+  vorhandenen `db_config()`-Logik. Zusammengeführt zu einer einzigen
+  Quelle: `get_setting()`/`set_setting()`, von Python-Code und
+  Templates gleichermaßen genutzt.
+- **Echter, vorbestehender Bug gefunden:** `io` war im gesamten Projekt
+  nie als Modul importiert (nur lokal einmal als `_io`-Alias), der
+  alte ZIP-Restore-Code nutzte aber `io.BytesIO(...)` direkt – wäre
+  bei jedem ZIP-Restore mit `NameError` abgestürzt. War schlicht nie
+  getestet worden. Jetzt als globaler Import gefixt.
+- **Automatisches Backup war nicht konfigurierbar** (immer DB+Medien+
+  Config hart kodiert). Jetzt per Checkbox einstellbar, was automatisch
+  gesichert wird (`backup_auto_include_db/uploads/config`).
+- **Restore war nicht granular:** DB und Medien wurden bisher immer
+  mitgenommen, wenn im ZIP vorhanden – nur Konfigdateien waren per
+  Checkbox optional. Jetzt sind alle drei Komponenten unabhängig
+  wählbar, sowohl beim Hochladen einer Datei (`/admin/restore`) als
+  auch beim neuen Direkt-Restore aus einem gespeicherten Backup.
+- **Neu: Direkt-Restore ohne Download-Umweg** – jedes automatische
+  Backup in der Liste hat jetzt einen "Wiederherstellen"-Knopf
+  (`/admin/backup/restore-from-auto/<datei>`), der dieselbe granulare
+  Auswahl (DB/Medien/Config) bietet wie der Datei-Upload-Weg.
+- Gemeinsame Restore-Logik in `_apply_restore_from_zip_bytes()`
+  extrahiert – vermeidet Code-Dopplung zwischen Upload-Restore und
+  Direkt-Restore.
+- Veraltete "Backup-Strategie"-Karte (empfahl noch manuelle
+  wöchentliche Backups, widersprach dem automatischen täglichen
+  Backup) entfernt, durch klare Erklärung der jetzt drei Wege ersetzt
+  (automatisch / Sofort-Download / Wiederherstellen).
+- 8 neue Tests (`TestGranularAutoBackupContent`, `TestGranularRestore`)
+  – insgesamt jetzt 50 Tests, alle grün.
+- Kleines Test-Aufräumen: `tests/conftest.py` entfernt jetzt auch
+  `.before_restore`/`.restore_tmp`-Artefakte, die Restore-Tests
+  erzeugen können (eine solche Datei war versehentlich fast committet
+  worden – `.gitignore` entsprechend erweitert).
+
+### Bewusst nicht angefasst
+Es gibt im Projekt zusätzlich eine zweite, komplett ungenutzte
+Konfigurationstabelle (`app_config` mit eigenem `get_config()`/
+`set_config()`) neben der tatsächlich verwendeten `config`-Tabelle –
+totes Gerüst aus früherer Entwicklung. Nicht angefasst, da außerhalb
+des Backup-Themas und mit Risiko für andere Funktionen.
+
+---
+
+## [Vorfall] – September 2026 – Login-Ausfall nach unvollständigem Deploy
+
+Nach dem CSRF-Feature (siehe Audit-Eintrag unten) wurde beim FTP-Deploy
+nur `app.py` hochgeladen, `templates/login.html` blieb auf dem alten
+Stand ohne CSRF-Hidden-Field. Ergebnis: jeder Login-Versuch scheiterte
+mit 403 "Kein Zugriff" (Browser-Konsole: `POST /login → 403`).
+
+**Kein Code-Fehler** – reines Deployment-Problem (GitHub ≠ Live-Server,
+keine automatische Synchronisierung). Behoben durch vollständigen
+Re-Upload aller geänderten Dateien. Siehe UEBERGABE.md, neuer Abschnitt
+„Deployment" mit Checkliste, um das künftig zu vermeiden.
+
+---
+
 ## [Aktuell] – September 2026 – Automatisches tägliches Backup
 
 Neue Funktion: automatische, tägliche Backups (DB + Medien + Config)

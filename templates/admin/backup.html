@@ -4,6 +4,14 @@
 {% block admin_content %}
 <h4 class="mb-4"><i class="bi bi-archive-fill me-2"></i>Backup & Wiederherstellung</h4>
 
+<p class="text-muted small mb-4">
+  Es gibt zwei unabhängige Wege, ein Backup zu bekommen, und einen Weg,
+  eins wieder einzuspielen:
+  <strong>1) automatisch</strong> (läuft täglich von selbst, Dateien bleiben auf dem Server),
+  <strong>2) manueller Sofort-Download</strong> (zum Mitnehmen auf den eigenen Rechner),
+  <strong>3) Wiederherstellen</strong> (aus einem Auto-Backup direkt, oder aus einer hochgeladenen Datei).
+</p>
+
 {# Statistiken #}
 <div class="row g-3 mb-4">
   <div class="col-6 col-md-3">
@@ -26,10 +34,12 @@
   </div>
 </div>
 
-{# Automatisches tägliches Backup #}
+{# ══════════════════════════════════════════════════════════
+   1) AUTOMATISCHES BACKUP
+   ══════════════════════════════════════════════════════════ #}
 <div class="card shadow-sm mb-4 border-primary">
   <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-    <span><i class="bi bi-clock-history me-2"></i>Automatisches tägliches Backup</span>
+    <span><i class="bi bi-clock-history me-2"></i>1. Automatisches tägliches Backup</span>
     {% if auto_enabled %}
       <span class="badge bg-light text-primary">Aktiv</span>
     {% else %}
@@ -56,24 +66,39 @@
       </div>
     </div>
 
-    <form method="POST" action="{{ url_for('admin_backup_auto_settings') }}" class="row g-2 align-items-end mb-3">
+    <form method="POST" action="{{ url_for('admin_backup_auto_settings') }}" class="mb-3">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div class="col-auto">
-        <div class="form-check form-switch">
-          <input class="form-check-input" type="checkbox" name="auto_enabled" id="auto_enabled" {% if auto_enabled %}checked{% endif %}>
-          <label class="form-check-label fw-semibold" for="auto_enabled">Automatisches Backup aktiv</label>
+      <div class="row g-3 align-items-end mb-2">
+        <div class="col-auto">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" name="auto_enabled" id="auto_enabled" {% if auto_enabled %}checked{% endif %}>
+            <label class="form-check-label fw-semibold" for="auto_enabled">Automatisches Backup aktiv</label>
+          </div>
+        </div>
+        <div class="col-auto">
+          <label class="form-label small mb-0" for="retention_days">Aufbewahrung (Tage)</label>
+          <input type="number" min="1" max="365" name="retention_days" id="retention_days"
+                 class="form-control form-control-sm" style="width:6rem" value="{{ retention_days }}">
         </div>
       </div>
-      <div class="col-auto">
-        <label class="form-label small mb-0" for="retention_days">Aufbewahrung (Tage)</label>
-        <input type="number" min="1" max="365" name="retention_days" id="retention_days"
-               class="form-control form-control-sm" style="width:6rem" value="{{ retention_days }}">
+      <div class="mb-2">
+        <div class="small text-muted mb-1">Was soll automatisch gesichert werden?</div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="checkbox" name="auto_include_db" id="auto_include_db" {% if auto_include_db %}checked{% endif %}>
+          <label class="form-check-label" for="auto_include_db"><i class="bi bi-database me-1 text-primary"></i>Datenbank</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="checkbox" name="auto_include_uploads" id="auto_include_uploads" {% if auto_include_uploads %}checked{% endif %}>
+          <label class="form-check-label" for="auto_include_uploads"><i class="bi bi-images me-1 text-warning"></i>Medien</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="checkbox" name="auto_include_config" id="auto_include_config" {% if auto_include_config %}checked{% endif %}>
+          <label class="form-check-label" for="auto_include_config"><i class="bi bi-file-code me-1 text-secondary"></i>Konfigurationsdateien</label>
+        </div>
       </div>
-      <div class="col-auto">
-        <button type="submit" class="btn btn-primary btn-sm">
-          <i class="bi bi-save me-1"></i>Speichern
-        </button>
-      </div>
+      <button type="submit" class="btn btn-primary btn-sm">
+        <i class="bi bi-save me-1"></i>Einstellungen speichern
+      </button>
     </form>
 
     <div class="alert alert-info small mb-3">
@@ -109,6 +134,10 @@
       </button>
     </form>
 
+    <div class="small text-muted mb-2">
+      Vorhandene automatische Backups (auf dem Server gespeichert, unter „Aktionen"
+      direkt herunterladen, löschen oder <strong>wiederherstellen</strong>):
+    </div>
     {% if auto_backups %}
     <div class="table-responsive">
       <table class="table table-sm align-middle mb-0">
@@ -130,18 +159,63 @@
               {% else %}{{ "%.0f"|format(b.size/1024) }} KB{% endif %}
             </td>
             <td class="text-end">
-              <a href="{{ url_for('admin_backup_download', filename=b.name) }}" class="btn btn-sm btn-outline-success">
+              <a href="{{ url_for('admin_backup_download', filename=b.name) }}" class="btn btn-sm btn-outline-success" title="Herunterladen">
                 <i class="bi bi-download"></i>
               </a>
+              <button type="button" class="btn btn-sm btn-outline-warning" title="Wiederherstellen"
+                      data-bs-toggle="modal" data-bs-target="#restoreModal{{ loop.index }}">
+                <i class="bi bi-arrow-counterclockwise"></i>
+              </button>
               <form method="POST" action="{{ url_for('admin_backup_delete', filename=b.name) }}"
                     class="d-inline" onsubmit="return confirm('Backup {{ b.name }} wirklich löschen?')">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn btn-sm btn-outline-danger">
+                <button type="submit" class="btn btn-sm btn-outline-danger" title="Löschen">
                   <i class="bi bi-trash"></i>
                 </button>
               </form>
             </td>
           </tr>
+
+          {# Restore-Modal für dieses Backup: gleiche granulare Auswahl wie beim Upload-Restore #}
+          <div class="modal fade" id="restoreModal{{ loop.index }}" tabindex="-1">
+            <div class="modal-dialog">
+              <div class="modal-content">
+                <form method="POST" action="{{ url_for('admin_backup_restore_from_auto', filename=b.name) }}"
+                      onsubmit="return confirm('Wirklich wiederherstellen? Die ausgewählten Daten werden überschrieben.')">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <div class="modal-header">
+                    <h6 class="modal-title"><i class="bi bi-arrow-counterclockwise me-2"></i>Wiederherstellen aus {{ b.name }}</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                  </div>
+                  <div class="modal-body">
+                    <div class="alert alert-danger py-2 small">
+                      <i class="bi bi-exclamation-triangle-fill me-2"></i>Überschreibt vorhandene Daten.
+                      Aktuelle DB wird vorher als <code>.before_restore</code> gesichert.
+                    </div>
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" name="restore_db" id="rdb{{ loop.index }}" checked>
+                      <label class="form-check-label" for="rdb{{ loop.index }}"><i class="bi bi-database me-1 text-primary"></i>Datenbank</label>
+                    </div>
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" name="restore_uploads" id="rup{{ loop.index }}" checked>
+                      <label class="form-check-label" for="rup{{ loop.index }}"><i class="bi bi-images me-1 text-warning"></i>Medien</label>
+                    </div>
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" name="restore_config" id="rcfg{{ loop.index }}">
+                      <label class="form-check-label" for="rcfg{{ loop.index }}"><i class="bi bi-file-code me-1 text-secondary"></i>Konfigurationsdateien</label>
+                    </div>
+                    <div class="form-text">Nur ausgewählte Komponenten werden angefasst – nicht ausgewählte bleiben unverändert.</div>
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="submit" class="btn btn-warning btn-sm">
+                      <i class="bi bi-arrow-counterclockwise me-1"></i>Jetzt wiederherstellen
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
           {% endfor %}
         </tbody>
       </table>
@@ -154,16 +228,19 @@
 
 <div class="row g-4">
 
-  {# Backup erstellen #}
+  {# ══════════════════════════════════════════════════════════
+     2) MANUELLER SOFORT-DOWNLOAD
+     ══════════════════════════════════════════════════════════ #}
   <div class="col-12 col-lg-6">
     <div class="card shadow-sm h-100">
       <div class="card-header bg-success text-white">
-        <i class="bi bi-download me-2"></i>Backup erstellen
+        <i class="bi bi-download me-2"></i>2. Backup jetzt herunterladen
       </div>
       <div class="card-body">
         <p class="text-muted small mb-3">
-          Wähle aus, was ins ZIP-Archiv aufgenommen werden soll.
-          Der Dateiname enthält Datum, Uhrzeit und gewählten Inhalt.
+          Erzeugt ein ZIP zum sofortigen Download auf deinen eigenen Rechner
+          (wird NICHT auf dem Server gespeichert – dafür ist Abschnitt 1 da).
+          Praktisch z.B. direkt vor einem manuellen Code-Update.
         </p>
 
         <form method="POST" action="{{ url_for('admin_backup') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -223,20 +300,24 @@
           </button>
         </form>
       </div>
-      <div class="card-footer py-2 small text-muted">
-        <i class="bi bi-lightbulb me-1 text-warning"></i>
-        <strong>Empfehlung:</strong> DB wöchentlich, DB+Medien monatlich, alles vor Code-Updates.
-      </div>
     </div>
   </div>
 
-  {# Wiederherstellen #}
+  {# ══════════════════════════════════════════════════════════
+     3) WIEDERHERSTELLEN AUS HOCHGELADENER DATEI
+     ══════════════════════════════════════════════════════════ #}
   <div class="col-12 col-lg-6">
     <div class="card shadow-sm h-100 border-warning">
       <div class="card-header bg-warning text-dark">
-        <i class="bi bi-upload me-2"></i>Wiederherstellen
+        <i class="bi bi-upload me-2"></i>3. Wiederherstellen aus Datei
       </div>
       <div class="card-body">
+        <p class="text-muted small mb-3">
+          Für Backups, die NICHT mehr auf dem Server liegen (z.B. selbst
+          heruntergeladen und lokal aufbewahrt). Für vorhandene
+          Auto-Backups gibt es in Abschnitt 1 einen direkten
+          "Wiederherstellen"-Knopf ohne Umweg über einen erneuten Upload.
+        </p>
         <div class="alert alert-danger py-2 mb-3 small">
           <i class="bi bi-exclamation-triangle-fill me-2"></i>
           <strong>Achtung!</strong> Überschreibt vorhandene Daten.
@@ -245,7 +326,7 @@
 
         <form method="POST" action="{{ url_for('admin_restore') }}"
               enctype="multipart/form-data"
-              onsubmit="return confirm('Wirklich wiederherstellen? Aktuelle Daten werden überschrieben.')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              onsubmit="return confirm('Wirklich wiederherstellen? Die ausgewählten Daten werden überschrieben.')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
           <div class="mb-3">
             <label class="form-label fw-semibold">Backup-Datei</label>
@@ -255,12 +336,19 @@
 
           <div class="card border-0 bg-light mb-3">
             <div class="card-body py-2 px-3 small">
-              <strong class="text-muted">ZIP enthält Konfigdateien?</strong>
-              <div class="form-check mt-1">
-                <input class="form-check-input" type="checkbox" name="include_config" id="restore_config">
-                <label class="form-check-label text-muted" for="restore_config">
-                  Konfigurationsdateien (app.py etc.) auch überschreiben
-                </label>
+              <strong class="text-muted">Was aus dem ZIP wiederherstellen?</strong>
+              <div class="form-text mb-2">Gilt nur für ZIP-Dateien – eine hochgeladene <code>.db</code>-Datei stellt immer nur die Datenbank wieder her.</div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="restore_db" id="restore_db" checked>
+                <label class="form-check-label" for="restore_db"><i class="bi bi-database me-1 text-primary"></i>Datenbank</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="restore_uploads" id="restore_uploads" checked>
+                <label class="form-check-label" for="restore_uploads"><i class="bi bi-images me-1 text-warning"></i>Medien</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="restore_config" id="restore_config">
+                <label class="form-check-label" for="restore_config"><i class="bi bi-file-code me-1 text-secondary"></i>Konfigurationsdateien</label>
               </div>
             </div>
           </div>
@@ -277,26 +365,5 @@
     </div>
   </div>
 
-</div>
-
-{# Strategie #}
-<div class="card shadow-sm mt-4">
-  <div class="card-header"><i class="bi bi-lightbulb me-2 text-warning"></i>Backup-Strategie</div>
-  <div class="card-body">
-    <div class="row g-3">
-      <div class="col-12 col-md-4">
-        <h6><i class="bi bi-calendar-week me-2 text-success"></i>Wöchentlich</h6>
-        <p class="small text-muted mb-0"><strong>Nur Datenbank</strong> – schnell, klein, enthält alle Tipps und Spielstände.</p>
-      </div>
-      <div class="col-12 col-md-4">
-        <h6><i class="bi bi-calendar-month me-2 text-warning"></i>Monatlich / Saisonstart</h6>
-        <p class="small text-muted mb-0"><strong>DB + Medien</strong> – vollständige Datensicherung inklusive aller Fotos und Dokumente.</p>
-      </div>
-      <div class="col-12 col-md-4">
-        <h6><i class="bi bi-code-slash me-2 text-secondary"></i>Vor Code-Updates</h6>
-        <p class="small text-muted mb-0"><strong>Alles</strong> – DB + Medien + Konfigdateien für vollständiges Rollback.</p>
-      </div>
-    </div>
-  </div>
 </div>
 {% endblock %}

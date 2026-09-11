@@ -5,6 +5,24 @@ für den Einstieg in einen neuen Chat.
 
 ## Wichtigste Punkte
 
+- **Backup-Bereich überarbeitet** (September 2026): automatisches
+  Backup ist jetzt konfigurierbar (welche Komponenten), Restore ist
+  granular (DB/Medien/Config einzeln wählbar, sowohl beim Datei-Upload
+  als auch direkt aus einem gespeicherten Auto-Backup). Ein echter,
+  vorbestehender Bug wurde dabei gefunden und gefixt (`io`-Modul war
+  nie importiert – ZIP-Restore wäre gecrasht). Helper-Funktionen für
+  Config-Werte vereinheitlicht: `get_setting()`/`set_setting()` statt
+  mehrerer Dopplungen. Details siehe CHANGELOG.md.
+
+- **⚠️ GitHub und der Live-Server (tippcup.com) sind komplett getrennt!**
+  `git push` lädt NICHTS automatisch auf den Server. Jede Änderung muss
+  zusätzlich manuell und VOLLSTÄNDIG per FTP hochgeladen werden – siehe
+  „Deployment"-Abschnitt weiter unten. Ist bereits einmal schiefgegangen
+  (September 2026): nur `app.py` wurde hochgeladen, `templates/` blieb
+  alt → CSRF-Feld fehlte im Login-Formular → alle Logins mit 403
+  abgelehnt. Beim nächsten Deploy IMMER den kompletten geänderten
+  Dateibaum hochladen, nicht nur einzelne Dateien.
+
 - **Automatisches tägliches Backup** (September 2026): läuft entweder
   passiv über Seitenaufrufe mit (kein Cron nötig) oder optional exakt
   getimed über `/cron/backup/<token>` (Token in Admin → Backup-Seite).
@@ -115,3 +133,52 @@ wird.
 
 Domain liga.tippcup.com läuft ggf. noch parallel — siehe
 Domain-Migration-Notizen oben.
+
+## Deployment (WICHTIG — bitte genau befolgen)
+
+GitHub (`github.com/meyomey/tippcup`) ist nur die Code-Ablage/Versionierung.
+**Es gibt keine automatische Verbindung zum Live-Server.** Nach jeder
+Änderung müssen die betroffenen Dateien manuell per FTP auf den
+Server-Pfad oben hochgeladen werden.
+
+**Seit September 2026 liefert Claude nach jeder inhaltlichen Änderung
+automatisch zwei komplette ZIPs statt einzelner Dateien** (behebt genau
+das Problem, das zum Login-Ausfall geführt hat — siehe Vorfall unten):
+- `tippcup_deploy.zip` — kompletter Ersatz für den FTP-Upload (app.py,
+  templates/, static/, vendor/, openliga.py, telegram_bot.py,
+  requirements.txt, docs/, passenger_wsgi.example.py). OHNE
+  tippspiel.db, OHNE echte passenger_wsgi.py, OHNE backups/-Inhalt.
+- `tippcup_github.zip` — 1:1 Abbild des committeten Repo-Stands
+  (per `git archive`), inkl. tests/, pytest.ini, .gitignore.
+
+Falls eine neue Chat-Session das noch nicht automatisch tut: **explizit
+danach fragen** ("kannst du mir wieder ein Deploy-ZIP und ein
+GitHub-ZIP bauen").
+
+**Checkliste vor jedem Upload:**
+1. Lokal `python3 -c "import app"` und `pytest` laufen lassen — beides
+   muss fehlerfrei durchlaufen.
+2. **Alle** geänderten Dateien identifizieren (z.B. `git status` bzw.
+   `git diff --name-only <alter-commit> <neuer-commit>`) — nicht nur
+   `app.py` hochladen, wenn sich auch `templates/` geändert hat!
+   Gerade bei CSRF-/Formular-Änderungen betrifft das fast immer sowohl
+   `app.py` als auch mehrere `templates/*.html`-Dateien gleichzeitig.
+3. Per FTP hochladen — **NIEMALS mit hochladen:**
+   `tippspiel.db` (echte Nutzerdaten!), die echte `passenger_wsgi.py`
+   auf dem Server (nur bei tatsächlichen Config-Änderungen anfassen,
+   z.B. neuer `SECRET_KEY` oder `DB_PATH`).
+4. Nach dem Upload: Passenger-Prozess neu starten (leere Datei
+   `tmp/restart.txt` im Projektordner anlegen, oder über Plesk →
+   Node.js/Python-Apps → Neu starten).
+5. Kurz die Seite testen (Login, eine Kernfunktion) — bei
+   Formular-/CSRF-Änderungen unbedingt mit Hard-Refresh
+   (Strg+Shift+R), da sonst der Browser-Cache eine alte Seite ohne
+   aktuelles CSRF-Feld anzeigen kann.
+
+**Vorfall September 2026 (zur Erinnerung):** Nach dem CSRF-Feature
+wurde nur `app.py` hochgeladen, `templates/login.html` blieb auf dem
+alten Stand ohne CSRF-Hidden-Field → jeder Login-Versuch endete mit
+403 "Kein Zugriff". Ursache war schnell gefunden (Browser-Konsole zeigte
+`POST /login → 403`, Seitenquelltext zeigte das fehlende Feld), aber
+komplett vermeidbar gewesen durch einen vollständigen Upload.
+

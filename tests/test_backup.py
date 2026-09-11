@@ -42,7 +42,7 @@ class TestScheduledBackup:
         tc.BACKUPS_DIR = str(tmp_path)
         make_user(username='admin1', is_admin=1)
         with app.app_context():
-            tc._set_config_value('backup_auto_enabled', '0')
+            tc.set_setting('backup_auto_enabled', '0')
             ok = tc.run_scheduled_backup_if_due()
         assert ok is False
         assert len(os.listdir(tmp_path)) == 0
@@ -121,3 +121,126 @@ class TestBackupFileManagement:
         r = client.get('/admin/backup/page')
         assert r.status_code == 200
         assert b'_auto.zip' in r.data
+
+
+class TestGranularAutoBackupContent:
+    """Welche Komponenten das AUTOMATISCHE Backup enthält, muss konfigurierbar sein."""
+
+    def test_default_includes_all_three(self, app, db, tmp_path, make_user):
+        tc.BACKUPS_DIR = str(tmp_path)
+        make_user(username='admin1', is_admin=1)
+        with app.app_context():
+            tc.run_scheduled_backup_if_due(force=True)
+        import zipfile
+        fname = [f for f in os.listdir(tmp_path) if f.endswith('.zip')][0]
+        with zipfile.ZipFile(tmp_path / fname) as zf:
+            names = zf.namelist()
+        assert 'tippspiel.db' in names
+        assert any(n.startswith('config/') for n in names)
+
+    def test_only_db_when_others_disabled(self, app, db, tmp_path, make_user):
+        tc.BACKUPS_DIR = str(tmp_path)
+        make_user(username='admin1', is_admin=1)
+        with app.app_context():
+            tc.set_setting('backup_auto_include_uploads', '0')
+            tc.set_setting('backup_auto_include_config', '0')
+            tc.run_scheduled_backup_if_due(force=True)
+        import zipfile
+        fname = [f for f in os.listdir(tmp_path) if f.endswith('.zip')][0]
+        with zipfile.ZipFile(tmp_path / fname) as zf:
+            names = zf.namelist()
+        assert 'tippspiel.db' in names
+        assert not any(n.startswith('uploads/') for n in names)
+        assert not any(n.startswith('config/') for n in names)
+
+
+class TestGranularRestore:
+    """Beim Wiederherstellen müssen DB/Medien/Config unabhängig voneinander wählbar sein."""
+
+    def _make_full_backup(self, app, tmp_path):
+        tc.BACKUPS_DIR = str(tmp_path)
+        with app.app_context():
+            tc.set_setting('backup_auto_include_db', '1')
+            tc.set_setting('backup_auto_include_uploads', '1')
+            tc.set_setting('backup_auto_include_config', '1')
+            tc.run_scheduled_backup_if_due(force=True)
+        fname = [f for f in os.listdir(tmp_path) if f.endswith('.zip')][0]
+        with open(tmp_path / fname, 'rb') as f:
+            return fname, f.read()
+
+    def test_restore_from_auto_only_config(self, client, app, db, make_user, tmp_path):
+        make_user(username='admin1', password='geheim123', is_admin=1)
+        fname, _ = self._make_full_backup(app, tmp_path)
+        login(client, 'admin1', 'geheim123')
+        with client.session_transaction() as sess:
+            csrf = sess.get('csrf_token')
+        r = client.post(f'/admin/backup/restore-from-auto/{fname}', data={
+            'restore_config': 'on', 'csrf_token': csrf,
+        }, follow_redirects=True)
+        body = r.get_data(as_text=True)
+        assert 'Konfigdateien' in body
+        assert 'Datenbank' not in body.split('Wiederhergestellt')[1].split('.')[0]
+
+    def test_restore_from_auto_requires_at_least_one_checkbox(self, client, app, db, make_user, tmp_path):
+        make_user(username='admin1', password='geheim123', is_admin=1)
+        fname, _ = self._make_full_backup(app, tmp_path)
+        login(client, 'admin1', 'geheim123')
+        with client.session_transaction() as sess:
+            csrf = sess.get('csrf_token')
+        r = client.post(f'/admin/backup/restore-from-auto/{fname}', data={
+            'csrf_token': csrf,
+        }, follow_redirects=True)
+        assert 'mindestens eine Komponente' in r.get_data(as_text=True)
+        with client.session_transaction() as sess:
+            assert sess.get('user_id') is not None, "Ohne Auswahl darf nichts passieren, auch kein Logout"
+
+    def test_upload_restore_only_db_selected(self, client, app, db, make_user, tmp_path):
+        import io
+        make_user(username='admin1', password='geheim123', is_admin=1)
+        fname, zip_bytes = self._make_full_backup(app, tmp_path)
+        login(client, 'admin1', 'geheim123')
+        with client.session_transaction() as sess:
+            csrf = sess.get('csrf_token')
+        r = client.post('/admin/restore', data={
+            'backup_file': (io.BytesIO(zip_bytes), fname),
+            'restore_db': 'on',
+            'csrf_token': csrf,
+        }, content_type='multipart/form-data', follow_redirects=True)
+        body = r.get_data(as_text=True)
+        assert 'Wiederhergestellt: Datenbank' in body
+        assert 'Medien' not in body.split('Wiederhergestellt')[1].split('.')[0]
+
+    def test_upload_restore_zip_without_selection_shows_warning(self, client, app, db, make_user, tmp_path):
+        import io
+        make_user(username='admin1', password='geheim123', is_admin=1)
+        fname, zip_bytes = self._make_full_backup(app, tmp_path)
+        login(client, 'admin1', 'geheim123')
+        with client.session_transaction() as sess:
+            csrf = sess.get('csrf_token')
+        r = client.post('/admin/restore', data={
+            'backup_file': (io.BytesIO(zip_bytes), fname),
+            'csrf_token': csrf,
+        }, content_type='multipart/form-data', follow_redirects=True)
+        assert 'mindestens eine Komponente' in r.get_data(as_text=True)
+
+    def test_restore_from_auto_path_traversal_blocked(self, client, app, db, make_user, tmp_path):
+        make_user(username='admin1', password='geheim123', is_admin=1)
+        tc.BACKUPS_DIR = str(tmp_path)
+        login(client, 'admin1', 'geheim123')
+        with client.session_transaction() as sess:
+            csrf = sess.get('csrf_token')
+        r = client.post('/admin/backup/restore-from-auto/..%2F..%2Fapp.py', data={
+            'restore_db': 'on', 'csrf_token': csrf,
+        }, follow_redirects=True)
+        assert 'nicht gefunden' in r.get_data(as_text=True)
+
+    def test_non_admin_cannot_restore_from_auto(self, client, app, db, make_user, tmp_path):
+        make_user(username='u1', password='geheim123', is_admin=0)
+        tc.BACKUPS_DIR = str(tmp_path)
+        login(client, 'u1', 'geheim123')
+        with client.session_transaction() as sess:
+            csrf = sess.get('csrf_token')
+        r = client.post('/admin/backup/restore-from-auto/irgendwas.zip', data={
+            'restore_db': 'on', 'csrf_token': csrf,
+        }, follow_redirects=False)
+        assert r.status_code in (302, 403)

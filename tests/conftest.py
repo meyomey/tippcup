@@ -24,13 +24,21 @@ import app as tc  # tc = tippcup
 @pytest.fixture()
 def app():
     """Frische, leere Test-Datenbank pro Testfunktion."""
-    if os.path.exists(TEST_DB):
-        os.remove(TEST_DB)
+    _cleanup_test_db_files()
     tc.init_db()
     tc.app.config.update(TESTING=True)
     yield tc.app
-    if os.path.exists(TEST_DB):
-        os.remove(TEST_DB)
+    _cleanup_test_db_files()
+
+
+def _cleanup_test_db_files():
+    """Entfernt die Test-DB und alle Nebenprodukte, die Restore-Tests
+    erzeugen können (.before_restore, .restore_tmp) – sonst bleiben
+    Artefakte im tests/-Ordner liegen und landen versehentlich im Git-Commit."""
+    for suffix in ('', '.before_restore', '.restore_tmp'):
+        path = TEST_DB + suffix
+        if os.path.exists(path):
+            os.remove(path)
 
 
 @pytest.fixture()

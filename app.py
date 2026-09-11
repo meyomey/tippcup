@@ -45,6 +45,7 @@ def _utc_to_local_str(ts_str, fmt='%H:%M'):
         return str(ts_str)[11:16]
 
 import sqlite3, os
+import io
 import json
 import math
 import shutil
@@ -590,17 +591,30 @@ def admin_required(f):
 # ════════════════════════════════════════════════════════════
 
 
+def get_setting(key, default=''):
+    """
+    Liest einen Wert aus der 'config'-Tabelle (Key-Value-Einstellungen,
+    z.B. Telegram-Zugangsdaten, Backup-Einstellungen). Einzige Quelle für
+    diese Tabelle – sowohl von Python-Code als auch von Templates
+    (siehe db_config() unten) genutzt, um Dopplung zu vermeiden.
+    """
+    try:
+        row = get_db().execute('SELECT value FROM config WHERE key=?', (key,)).fetchone()
+        return row['value'] if row and row['value'] not in (None, '') else default
+    except Exception as e:
+        app.logger.debug(f"Ignorierter Fehler: {e}")
+        return default
+
+def set_setting(key, value):
+    """Schreibt einen Wert in die 'config'-Tabelle."""
+    get_db().execute('INSERT OR REPLACE INTO config (key,value) VALUES (?,?)', (key, value))
+    get_db().commit()
+
+
 @app.context_processor
 def inject_db_config():
     """Stellt db_config() in allen Templates bereit (z.B. für Telegram-Link)."""
-    def db_config(key, default=''):
-        try:
-            row = get_db().execute('SELECT value FROM config WHERE key=?', (key,)).fetchone()
-            return row['value'] if row and row['value'] else default
-        except Exception as e:
-            app.logger.debug(f"Ignorierter Fehler: {e}")
-            return default
-    return dict(db_config=db_config)
+    return dict(db_config=get_setting)
 
 
 # ════════════════════════════════════════════════════════════
@@ -4068,12 +4082,12 @@ def build_backup_zip_bytes(include_db=True, include_uploads=True, include_config
     Gemeinsam genutzt vom manuellen Download (admin_backup) und dem
     automatischen täglichen Backup (run_scheduled_backup_if_due).
     """
-    import zipfile, io as _io
+    import zipfile
     timestamp   = local_now().strftime('%Y%m%d_%H%M%S')
     db_path     = os.environ.get('DB_PATH', DATABASE)
     uploads_dir = os.path.join(BASE_DIR, 'static', 'uploads')
 
-    buf = _io.BytesIO()
+    buf = io.BytesIO()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
         if include_db:
             db_tmp = os.path.join(tempfile.gettempdir(), f'tippcup_db_{timestamp}.db')
@@ -4107,7 +4121,6 @@ def build_backup_zip_bytes(include_db=True, include_uploads=True, include_config
 @admin_required
 def admin_backup():
     """Selektives Backup als ZIP – Inhalt per Checkboxen wählbar, direkter Download."""
-    import io as _io
     include_db      = 'include_db'      in request.form
     include_uploads = 'include_uploads' in request.form
     include_config  = 'include_config'  in request.form
@@ -4125,7 +4138,7 @@ def admin_backup():
 
     try:
         zip_bytes = build_backup_zip_bytes(include_db, include_uploads, include_config)
-        return send_file(_io.BytesIO(zip_bytes), as_attachment=True,
+        return send_file(io.BytesIO(zip_bytes), as_attachment=True,
                          download_name=zip_name, mimetype='application/zip')
     except Exception as e:
         flash(f'Backup fehlgeschlagen: {e}', 'danger')
@@ -4135,20 +4148,12 @@ def admin_backup():
 # ── Automatisches tägliches Backup ────────────────────────────
 BACKUPS_DIR = os.path.join(BASE_DIR, 'backups')
 
-def _get_config_value(key, default=None):
-    row = get_db().execute('SELECT value FROM config WHERE key=?', (key,)).fetchone()
-    return row['value'] if row and row['value'] not in (None, '') else default
-
-def _set_config_value(key, value):
-    get_db().execute('INSERT OR REPLACE INTO config (key,value) VALUES (?,?)', (key, value))
-    get_db().commit()
-
 def get_or_create_backup_cron_token():
     """Erzeugt beim ersten Aufruf ein zufälliges Token für den externen Cron-Trigger."""
-    token = _get_config_value('backup_cron_token')
+    token = get_setting('backup_cron_token')
     if not token:
         token = secrets.token_urlsafe(32)
-        _set_config_value('backup_cron_token', token)
+        set_setting('backup_cron_token', token)
     return token
 
 def prune_old_backups(retention_days):
@@ -4180,11 +4185,11 @@ def run_scheduled_backup_if_due(force=False):
     """
     with app.app_context():
         db = get_db()
-        if not force and _get_config_value('backup_auto_enabled', '1') == '0':
+        if not force and get_setting('backup_auto_enabled', '1') == '0':
             return False
         now = local_now()
         if not force:
-            last_raw = _get_config_value('backup_last_auto')
+            last_raw = get_setting('backup_last_auto')
             if last_raw:
                 try:
                     last = datetime.fromisoformat(last_raw)
@@ -4195,10 +4200,13 @@ def run_scheduled_backup_if_due(force=False):
         # Zeitstempel SOFORT setzen, bevor die eigentliche Arbeit beginnt –
         # verhindert, dass zwei fast gleichzeitige Trigger (Seitenaufruf +
         # externer Cron) doppelt loslaufen.
-        _set_config_value('backup_last_auto', now.isoformat())
+        set_setting('backup_last_auto', now.isoformat())
         try:
             os.makedirs(BACKUPS_DIR, exist_ok=True)
-            zip_bytes = build_backup_zip_bytes(include_db=True, include_uploads=True, include_config=True)
+            include_db      = get_setting('backup_auto_include_db', '1') == '1'
+            include_uploads = get_setting('backup_auto_include_uploads', '1') == '1'
+            include_config  = get_setting('backup_auto_include_config', '1') == '1'
+            zip_bytes = build_backup_zip_bytes(include_db, include_uploads, include_config)
             zip_name  = f'tippcup_backup_{now.strftime("%Y%m%d_%H%M%S")}_auto.zip'
             zip_path  = os.path.join(BACKUPS_DIR, zip_name)
             if os.path.exists(zip_path):
@@ -4209,9 +4217,9 @@ def run_scheduled_backup_if_due(force=False):
                 zip_path = os.path.join(BACKUPS_DIR, zip_name)
             with open(zip_path, 'wb') as f:
                 f.write(zip_bytes)
-            retention_days = int(_get_config_value('backup_retention_days', '14'))
+            retention_days = int(get_setting('backup_retention_days', '14'))
             prune_old_backups(retention_days)
-            _set_config_value('backup_last_success', now.isoformat())
+            set_setting('backup_last_success', now.isoformat())
             app.logger.info(f'Automatisches Backup erstellt: {zip_name}')
             return True
         except Exception:
@@ -4273,10 +4281,13 @@ def admin_backup_page():
     }
 
     # Automatisches Backup: Status + vorhandene Dateien
-    auto_enabled   = _get_config_value('backup_auto_enabled', '1') == '1'
-    retention_days = int(_get_config_value('backup_retention_days', '14'))
-    last_attempt   = _get_config_value('backup_last_auto')
-    last_success   = _get_config_value('backup_last_success')
+    auto_enabled          = get_setting('backup_auto_enabled', '1') == '1'
+    auto_include_db       = get_setting('backup_auto_include_db', '1') == '1'
+    auto_include_uploads  = get_setting('backup_auto_include_uploads', '1') == '1'
+    auto_include_config   = get_setting('backup_auto_include_config', '1') == '1'
+    retention_days = int(get_setting('backup_retention_days', '14'))
+    last_attempt   = get_setting('backup_last_auto')
+    last_success   = get_setting('backup_last_success')
     cron_token     = get_or_create_backup_cron_token()
     cron_url       = url_for('cron_backup', token=cron_token, _external=True)
 
@@ -4296,6 +4307,8 @@ def admin_backup_page():
         db_size=db_size, db_mtime=db_mtime, stats=stats,
         upload_size=upload_size, upload_count=upload_count,
         auto_enabled=auto_enabled, retention_days=retention_days,
+        auto_include_db=auto_include_db, auto_include_uploads=auto_include_uploads,
+        auto_include_config=auto_include_config,
         last_attempt=last_attempt, last_success=last_success,
         cron_url=cron_url, auto_backups=auto_backups)
 
@@ -4303,14 +4316,23 @@ def admin_backup_page():
 @app.route('/admin/backup/auto-settings', methods=['POST'])
 @admin_required
 def admin_backup_auto_settings():
-    """Speichert Ein/Aus + Aufbewahrungsdauer für das automatische Backup."""
+    """Speichert Ein/Aus, Aufbewahrungsdauer und Inhalt für das automatische Backup."""
     enabled = '1' if request.form.get('auto_enabled') == 'on' else '0'
     try:
         retention_days = max(1, min(365, int(request.form.get('retention_days', 14))))
     except (TypeError, ValueError):
         retention_days = 14
-    _set_config_value('backup_auto_enabled', enabled)
-    _set_config_value('backup_retention_days', str(retention_days))
+    include_db      = '1' if request.form.get('auto_include_db')      == 'on' else '0'
+    include_uploads = '1' if request.form.get('auto_include_uploads') == 'on' else '0'
+    include_config  = '1' if request.form.get('auto_include_config')  == 'on' else '0'
+    if include_db == '0' and include_uploads == '0' and include_config == '0':
+        flash('Bitte mindestens eine Komponente für das automatische Backup auswählen.', 'warning')
+        return redirect(url_for('admin_backup_page'))
+    set_setting('backup_auto_enabled', enabled)
+    set_setting('backup_retention_days', str(retention_days))
+    set_setting('backup_auto_include_db', include_db)
+    set_setting('backup_auto_include_uploads', include_uploads)
+    set_setting('backup_auto_include_config', include_config)
     flash('Einstellungen für automatisches Backup gespeichert.', 'success')
     return redirect(url_for('admin_backup_page'))
 
@@ -4320,7 +4342,7 @@ def admin_backup_auto_settings():
 def admin_backup_regenerate_token():
     """Erzeugt ein neues Cron-Token – die alte URL funktioniert danach nicht mehr."""
     new_token = secrets.token_urlsafe(32)
-    _set_config_value('backup_cron_token', new_token)
+    set_setting('backup_cron_token', new_token)
     flash('Neues Cron-Token erzeugt. Bitte die URL in Plesk/eurem Cron-Dienst aktualisieren!', 'warning')
     return redirect(url_for('admin_backup_page'))
 
@@ -4377,74 +4399,110 @@ def admin_backup_delete(filename):
     return redirect(url_for('admin_backup_page'))
 
 
+def _apply_restore_from_zip_bytes(zip_bytes, restore_db=True, restore_uploads=True, restore_config=False):
+    """
+    Spielt ein Backup-ZIP selektiv ein. Jede der drei Komponenten kann
+    einzeln an-/abgewählt werden (z.B. nur Datenbank, ohne Medien
+    anzufassen). Wird sowohl vom Upload-Restore (admin_restore) als auch
+    vom Direkt-Restore aus einem vorhandenen Auto-Backup verwendet.
+
+    Gibt (restored: list[str], error: str|None) zurück. Bei error!=None
+    wurde NICHTS verändert (Validierungsfehler vor jeder Schreiboperation).
+    """
+    import zipfile, sqlite3 as _sq3
+    db_path     = os.environ.get('DB_PATH', DATABASE)
+    uploads_dir = os.path.join(BASE_DIR, 'static', 'uploads')
+    restored    = []
+
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        names = zf.namelist()
+
+        # DB zuerst validieren (in ein Temp-File), bevor irgendwas
+        # angefasst wird -- verhindert einen halb durchgeführten Restore.
+        db_tmp = None
+        if restore_db and 'tippspiel.db' in names:
+            db_tmp = db_path + '.restore_tmp'
+            with open(db_tmp, 'wb') as out:
+                out.write(zf.read('tippspiel.db'))
+            try:
+                c = _sq3.connect(db_tmp)
+                c.execute('SELECT COUNT(*) FROM users')
+                c.close()
+            except Exception as ve:
+                os.remove(db_tmp)
+                return [], f'DB im ZIP ungültig: {ve}'
+
+        if db_tmp:
+            shutil.copy2(db_path, db_path + '.before_restore')
+            shutil.move(db_tmp, db_path)
+            restored.append('Datenbank')
+
+        if restore_uploads:
+            upload_files = [n for n in names if n.startswith('uploads/')]
+            if upload_files:
+                os.makedirs(uploads_dir, exist_ok=True)
+                for zname in upload_files:
+                    rel = zname[len('uploads/'):]
+                    if not rel: continue
+                    dest = os.path.join(uploads_dir, rel)
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    with open(dest, 'wb') as out:
+                        out.write(zf.read(zname))
+                restored.append(f'{len(upload_files)} Medien')
+
+        if restore_config:
+            config_files = [n for n in names if n.startswith('config/')]
+            if config_files:
+                for zname in config_files:
+                    rel  = zname[len('config/'):]
+                    dest = os.path.join(BASE_DIR, rel)
+                    with open(dest, 'wb') as out:
+                        out.write(zf.read(zname))
+                restored.append(f'{len(config_files)} Konfigdateien')
+
+    return restored, None
+
+
 @app.route('/admin/restore', methods=['POST'])
 @admin_required
 def admin_restore():
-    """Restore aus ZIP (selektiv) oder reiner .db-Datei."""
-    import zipfile, sqlite3 as _sq3
+    """Restore aus ZIP (selektiv per Checkbox) oder reiner .db-Datei."""
+    import sqlite3 as _sq3
     f = request.files.get('backup_file')
     if not f or not f.filename:
         flash('Keine Datei ausgewählt.', 'danger')
         return redirect(url_for('admin_backup_page'))
 
     db_path     = os.environ.get('DB_PATH', DATABASE)
-    uploads_dir = os.path.join(BASE_DIR, 'static', 'uploads')
     fname_lower = f.filename.lower()
+    restore_db      = 'restore_db'      in request.form
+    restore_uploads = 'restore_uploads' in request.form
+    restore_config  = 'restore_config'  in request.form
 
-    try:
-        if fname_lower.endswith('.zip'):
-            data = f.read()
-            with zipfile.ZipFile(io.BytesIO(data)) as zf:
-                names = zf.namelist()
-                restored = []
-
-                # DB wiederherstellen wenn vorhanden
-                if 'tippspiel.db' in names:
-                    db_tmp = db_path + '.restore_tmp'
-                    with open(db_tmp, 'wb') as out:
-                        out.write(zf.read('tippspiel.db'))
-                    # Validieren
-                    try:
-                        c = _sq3.connect(db_tmp)
-                        c.execute('SELECT COUNT(*) FROM users')
-                        c.close()
-                    except Exception as ve:
-                        os.remove(db_tmp)
-                        flash(f'DB im ZIP ungültig: {ve}', 'danger')
-                        return redirect(url_for('admin_backup_page'))
-                    shutil.copy2(db_path, db_path + '.before_restore')
-                    shutil.move(db_tmp, db_path)
-                    restored.append('Datenbank')
-
-                # Uploads wiederherstellen
-                upload_files = [n for n in names if n.startswith('uploads/')]
-                if upload_files:
-                    os.makedirs(uploads_dir, exist_ok=True)
-                    for zname in upload_files:
-                        rel  = zname[len('uploads/'):]
-                        if not rel: continue
-                        dest = os.path.join(uploads_dir, rel)
-                        os.makedirs(os.path.dirname(dest), exist_ok=True)
-                        with open(dest, 'wb') as out:
-                            out.write(zf.read(zname))
-                    restored.append(f'{len(upload_files)} Medien')
-
-                # Konfigdateien
-                config_files = [n for n in names if n.startswith('config/')]
-                if config_files and 'include_config' in request.form:
-                    for zname in config_files:
-                        rel  = zname[len('config/'):]
-                        dest = os.path.join(BASE_DIR, rel)
-                        with open(dest, 'wb') as out:
-                            out.write(zf.read(zname))
-                    restored.append(f'{len(config_files)} Konfigdateien')
-
+    if fname_lower.endswith('.zip'):
+        if not any([restore_db, restore_uploads, restore_config]):
+            flash('Bitte mindestens eine Komponente zum Wiederherstellen auswählen.', 'warning')
+            return redirect(url_for('admin_backup_page'))
+        try:
+            restored, error = _apply_restore_from_zip_bytes(
+                f.read(), restore_db, restore_uploads, restore_config)
+            if error:
+                flash(error, 'danger')
+                return redirect(url_for('admin_backup_page'))
+            if not restored:
+                flash('Die ausgewählten Komponenten waren im ZIP nicht enthalten.', 'warning')
+                return redirect(url_for('admin_backup_page'))
             session.clear()
             flash(f'✅ Wiederhergestellt: {", ".join(restored)}. Bitte neu anmelden.', 'success')
             return redirect(url_for('login'))
+        except Exception as e:
+            app.logger.exception('Restore fehlgeschlagen')
+            flash(f'Wiederherstellung fehlgeschlagen: {e}', 'danger')
+            return redirect(url_for('admin_backup_page'))
 
-        elif fname_lower.endswith('.db'):
-            # Legacy: reine .db-Datei
+    elif fname_lower.endswith('.db'):
+        # Legacy: reine .db-Datei (immer nur die Datenbank, kein Auswahl-UI nötig)
+        try:
             tmp = db_path + '.restore_tmp'
             f.save(tmp)
             try:
@@ -4460,12 +4518,50 @@ def admin_restore():
             session.clear()
             flash('✅ Datenbank wiederhergestellt. Bitte neu anmelden.', 'success')
             return redirect(url_for('login'))
-
-        else:
-            flash('Ungültiges Format – nur .zip oder .db erlaubt.', 'danger')
+        except Exception as e:
+            app.logger.exception('Restore fehlgeschlagen')
+            flash(f'Wiederherstellung fehlgeschlagen: {e}', 'danger')
             return redirect(url_for('admin_backup_page'))
 
+    else:
+        flash('Ungültiges Format – nur .zip oder .db erlaubt.', 'danger')
+        return redirect(url_for('admin_backup_page'))
+
+
+@app.route('/admin/backup/restore-from-auto/<path:filename>', methods=['POST'])
+@admin_required
+def admin_backup_restore_from_auto(filename):
+    """Stellt direkt aus einem vorhandenen automatischen Backup wieder her –
+    ohne den Umweg über Download + erneuten Upload."""
+    fpath = _safe_backup_filename(filename)
+    if not fpath:
+        flash('Backup-Datei nicht gefunden.', 'danger')
+        return redirect(url_for('admin_backup_page'))
+
+    restore_db      = 'restore_db'      in request.form
+    restore_uploads = 'restore_uploads' in request.form
+    restore_config  = 'restore_config'  in request.form
+    if not any([restore_db, restore_uploads, restore_config]):
+        flash('Bitte mindestens eine Komponente zum Wiederherstellen auswählen.', 'warning')
+        return redirect(url_for('admin_backup_page'))
+
+    try:
+        with open(fpath, 'rb') as f:
+            zip_bytes = f.read()
+        restored, error = _apply_restore_from_zip_bytes(
+            zip_bytes, restore_db, restore_uploads, restore_config)
+        if error:
+            flash(error, 'danger')
+            return redirect(url_for('admin_backup_page'))
+        if not restored:
+            flash('Die ausgewählten Komponenten waren in diesem Backup nicht enthalten.', 'warning')
+            return redirect(url_for('admin_backup_page'))
+        session.clear()
+        flash(f'✅ Wiederhergestellt aus {os.path.basename(fpath)}: {", ".join(restored)}. '
+              f'Bitte neu anmelden.', 'success')
+        return redirect(url_for('login'))
     except Exception as e:
+        app.logger.exception('Restore aus Auto-Backup fehlgeschlagen')
         flash(f'Wiederherstellung fehlgeschlagen: {e}', 'danger')
         return redirect(url_for('admin_backup_page'))
 
